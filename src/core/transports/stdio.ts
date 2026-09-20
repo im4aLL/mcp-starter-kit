@@ -1,7 +1,7 @@
 import type { McpServerFactory } from "@modelcontextprotocol/server";
 import { type StdioServerHandle, serveStdio } from "@modelcontextprotocol/server/stdio";
 
-import { logger } from "../../utils/logger.ts";
+import { logger } from "../../utils/logger";
 
 /**
  * Starts an MCP server over stdio using a caller-supplied server factory.

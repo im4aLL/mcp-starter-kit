@@ -22,7 +22,7 @@ A client can list `code_review` and retrieve a one-message user prompt generated
   argsSchema: CodeReviewPromptArgsSchema,
   role: "user",
 })
-export class CodeReviewPrompt implements McpPromptHandler {
+export class CodeReviewPrompt implements IMcpPromptHandler {
   /**
    * Builds the code-review instruction.
    *
@@ -43,7 +43,7 @@ Registration remains explicit:
  *
  * @returns Explicit tool, prompt, and resource constructor lists.
  */
-export function getCapabilityTypes(): CapabilityTypes {
+export function getCapabilityTypes(): ICapabilities {
   return {
     tools: [AddTool],
     prompts: [CodeReviewPrompt],
@@ -58,7 +58,7 @@ export function getCapabilityTypes(): CapabilityTypes {
 - [ ] Add the schema-derived `CodeReviewPromptArgs` type in `code-review.types.ts`.
 - [ ] Add non-generic prompt handler, prompt metadata, constructor-list, and resolved-prompt contracts to `src/core/types.ts`. Handler arguments remain schema-specific through the class method annotation and typed decorator constraint rather than a generic implements clause.
 - [ ] Add a typed `@prompt` decorator and direct metadata reader to `src/core/decorators.ts`. Have `@prompt` apply Inversify's `injectable()` metadata internally, constrain the decorated handler to accept `z.output<TArgsSchema>` and an allowed prompt result, and store `role` as string-shortcut metadata only.
-- [ ] Add `CodeReviewPrompt` in the target shape above with only `@prompt(...)`, `implements McpPromptHandler`, and an explicitly annotated schema-derived handler argument. Do not repeat `@injectable()` on the capability class.
+- [ ] Add `CodeReviewPrompt` in the target shape above with only `@prompt(...)`, `implements IMcpPromptHandler`, and an explicitly annotated schema-derived handler argument. Do not repeat `@injectable()` on the capability class.
 - [ ] Extend `getCapabilityTypes()` with `CodeReviewPrompt`, bind the listed prompt constructor in the per-server container, resolve it through the common resolver, and register its decorator-owned description, argument schema, role, and callback.
 - [ ] Forward the SDK callback's second argument unchanged to the resolved instance's `handler(args, extra)` and do not call `.parse()` in core.
 - [ ] Extend `map-results.ts` so a string prompt result becomes one text message using the decorator metadata role, defaulting to `user`.

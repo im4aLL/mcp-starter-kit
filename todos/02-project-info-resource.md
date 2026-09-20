@@ -22,7 +22,7 @@ A client can list and read `project://info`. The listing advertises `text/plain`
   description: "Describes the MCP starter project.",
   mimeType: "text/plain",
 })
-export class ProjectInfoResource implements McpResourceHandler {
+export class ProjectInfoResource implements IMcpResourceHandler {
   /**
    * Returns project information.
    *
@@ -43,7 +43,7 @@ Registration remains explicit:
  *
  * @returns Explicit tool, prompt, and resource constructor lists.
  */
-export function getCapabilityTypes(): CapabilityTypes {
+export function getCapabilityTypes(): ICapabilities {
   return {
     tools: [AddTool],
     prompts: [],
@@ -57,7 +57,7 @@ export function getCapabilityTypes(): CapabilityTypes {
 - [ ] Add `JsonPrimitive`, `JsonObject`, `JsonArray`, and `JsonValue` plus non-generic resource handler, resource metadata, constructor-list, and resolved-resource contracts to `src/core/types.ts`. Keep domain resource returns limited to strings or valid JSON values and permit SDK wire contents.
 - [ ] Add `src/resources/project-info/project-info.schemas.ts` with a Zod string schema that documents the sample's domain result and `project-info.types.ts` with its inferred `ProjectInfo` type. Do not pass this schema to the SDK or parse resource bodies in core because MCP resources have no domain-output schema application step.
 - [ ] Add a typed `@resource` decorator and direct metadata reader to `src/core/decorators.ts`. Have `@resource` apply Inversify's `injectable()` metadata internally. MCP metadata belongs to the constructor and must not become instance fields or trigger binding, discovery, or automatic registration.
-- [ ] Add `ProjectInfoResource` in the target shape above with only `@resource(...)`, `implements McpResourceHandler`, and an explicitly annotated `handler(_uri: string): ProjectInfo`. Do not repeat `@injectable()` on the capability class.
+- [ ] Add `ProjectInfoResource` in the target shape above with only `@resource(...)`, `implements IMcpResourceHandler`, and an explicitly annotated `handler(_uri: string): ProjectInfo`. Do not repeat `@injectable()` on the capability class.
 - [ ] Extend `getCapabilityTypes()` with `ProjectInfoResource`, bind the listed resource constructor in the per-server container, resolve it through the common resolver, and extend capability registration to call the resolved instance's `handler(uri, extra)` without parsing.
 - [ ] Add `isJsonValue`, `ResourceSerializationError`, and complete resource domain mapping to `map-results.ts`: check wire `{ contents }` first, then strings, then other JSON values.
 - [ ] Map strings to `text/plain` without JSON quoting and map other JSON values to `application/json` with `JSON.stringify`.

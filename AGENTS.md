@@ -1,3 +1,4 @@
 - Every function, class, and class method must have a standard TSDoc docBlock above the declaration. Types in `*.types.ts` and schemas in `*.schemas.ts` do not require TSDoc.
 - For a single-line comment, use `// ...` rather than `/** ... */`. Reserve `/** ... */` for TSDoc on functions, classes, and methods (multi-line blocks with `@param`, `@returns`, and related tags when applicable).
 - In function and method bodies, put a blank line between logical steps: after initial `const`/`let` setup, after guard branches that early-return or throw, before shared setup used by later branches, and before a final fallback `return`.
+- Name interfaces with an `I` prefix (for example `ICapabilities`). Name domain type aliases with a `Type` suffix (for example `AddToolInputType`). Conventional JSON and scalar aliases such as `JsonValue`, `JsonObject`, `JsonArray`, and `JsonPrimitive` keep their established names.

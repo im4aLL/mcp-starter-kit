@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createServer } from "./create-server.ts";
+import { createServer } from "./create-server";
+import type { IResolvedCapabilities, IServerConfig } from "./types";
 
 const { serverInfoSpy } = vi.hoisted(() => ({ serverInfoSpy: vi.fn() }));
 
@@ -33,27 +34,31 @@ vi.mock("@modelcontextprotocol/server", async (importOriginal) => {
   return { ...actual, McpServer: ObservedMcpServer };
 });
 
+const emptyCapabilities: IResolvedCapabilities = { tools: [] };
+
+const testServerConfig: IServerConfig = { name: "test-server", version: "9.9.9" };
+
 describe("createServer", () => {
   beforeEach(() => {
     serverInfoSpy.mockClear();
   });
 
-  it("advertises the configured name and version to the McpServer", () => {
-    const server = createServer();
+  it("advertises the caller-supplied name and version to the McpServer", () => {
+    const server = createServer(emptyCapabilities, testServerConfig);
 
     expect(server).toBeDefined();
-    expect(serverInfoSpy).toHaveBeenCalledWith({ name: "mcp-framework", version: "0.1.0" });
+    expect(serverInfoSpy).toHaveBeenCalledWith({ name: "test-server", version: "9.9.9" });
   });
 
   it("returns a new server instance on every call", () => {
-    const first = createServer();
-    const second = createServer();
+    const first = createServer(emptyCapabilities, testServerConfig);
+    const second = createServer(emptyCapabilities, testServerConfig);
 
     expect(first).not.toBe(second);
   });
 
   it("exposes the underlying protocol server for later registration", () => {
-    const server = createServer();
+    const server = createServer(emptyCapabilities, testServerConfig);
 
     expect(server.server).toBeDefined();
     expect(server.server.getClientCapabilities()).toBeUndefined();

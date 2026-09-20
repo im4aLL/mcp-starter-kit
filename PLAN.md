@@ -11,12 +11,23 @@ All app code under `src/`:
 ```
 src/
   main.ts
+  config.ts
   providers.ts
   capabilities/
     capabilities.ts
   core/
-    types.ts
-    decorators.ts
+    types/
+      index.ts
+      capability.types.ts
+      handler.types.ts
+      json.types.ts
+      server.types.ts
+      tool.types.ts
+    decorators/
+      index.ts
+      decorators.types.ts
+      tool.decorator.ts
+    capability-metadata.ts
     container.ts
     resolve-capabilities.ts
     create-server.ts
@@ -27,6 +38,7 @@ src/
       stdio.ts
   services/
     calculator-service.ts
+    calculator-service.spec.ts
   tools/
     add-tool/
       add-tool.ts
@@ -50,13 +62,16 @@ src/
 ```
 
 - `src/main.ts` - shebang + per-server composition factory + `startStdio(createAppServer)`. Slim, not a line-count target. Lifecycle (handle + signals) lives in the stdio transport.
+- `src/config.ts` - application-owned server identity (`name` and `version`) advertised to MCP clients, with defaults and optional environment overrides
 - `src/providers.ts` - application-owned provider configuration; lists ordinary concrete services without requiring edits to generic core container code
 - `src/capabilities/capabilities.ts` - returns explicit tool, prompt, and resource constructor lists from `getCapabilityTypes()`; it never constructs or discovers capabilities
 - `src/core/container.ts` - creates one Inversify container per server, sets the default binding scope to singleton, binds provider configuration and listed capability classes, and permits explicit custom bindings without containing application service imports
-- `src/core/decorators.ts` - typed `@tool`, `@prompt`, and `@resource` metadata decorators plus metadata readers; each capability decorator also applies Inversify injectable metadata but never auto-registers classes
+- `src/core/types/` - barrel-exported type modules: JSON value contract, handler contracts and results, `@tool` metadata, capability composition, and server config
+- `src/core/decorators/` - typed `@tool`, `@prompt`, and `@resource` metadata decorators plus metadata readers, one decorator per file over the shared `capability-metadata.ts` constructor store; each capability decorator also applies Inversify injectable metadata but never auto-registers classes
+- `src/core/capability-metadata.ts` - shared constructor-metadata store used by every capability decorator: reads, writes, and the duplicate-capability guard
 - `src/core/resolve-capabilities.ts` - resolves the listed constructors through the per-server container and combines each instance with its decorator metadata
 - `src/core/` - handler contracts, decorators, resolution, registration, result mapping, and transport
-- `src/core/capabilities.types.spec.ts` - type-level proof that heterogeneous decorated constructors share one `CapabilityTypes` list and mismatched schema-derived handlers fail compilation
+- `src/core/capabilities.types.spec.ts` - type-level proof that heterogeneous decorated constructors share one `ICapabilities` list and mismatched schema-derived handlers fail compilation
 - `src/services/calculator-service.ts` - small injectable sample dependency used by `AddTool`
 - sample capability files follow `*.ts`, `*.schemas.ts`, `*.types.ts`, `*.spec.ts`
 
@@ -64,7 +79,7 @@ src/
 
 Handlers return domain values by default. Core maps those to MCP wire format. Core never calls `.parse()` on input or output schemas. The SDK owns schema application.
 
-Capability classes implement non-generic `McpToolHandler`, `McpPromptHandler`, or `McpResourceHandler` contracts. Their method parameters and returns remain explicitly annotated with schema-derived types such as `AddToolInput` and `AddToolOutput`. The typed metadata decorators parameterize their internal target constraints with the Zod schema objects and verify that the decorated handler accepts `z.output<TSchema>` and returns the corresponding result contract. This keeps authoring concise without losing the schema-to-handler compile-time relationship.
+Capability classes implement non-generic `IMcpToolHandler`, `IMcpPromptHandler`, or `IMcpResourceHandler` contracts. Their method parameters and returns remain explicitly annotated with schema-derived types such as `AddToolInputType` and `AddToolOutputType`. The typed metadata decorators parameterize their internal target constraints with the Zod schema objects and verify that the decorated handler accepts `z.output<TSchema>` and returns the corresponding result contract. This keeps authoring concise without losing the schema-to-handler compile-time relationship.
 
 Decorators do not add instance properties, replace constructors, resolve dependencies, scan modules, bind classes, or register classes globally. Metadata readers accept only the directly decorated constructor; metadata is not inherited implicitly. Each capability constructor must have exactly one of the three capability decorators. Before applying `injectable()`, every capability decorator checks one shared constructor-metadata store and throws a contextual decoration error if another capability decorator already marked the class. Pre-resolution validation rejects missing metadata, a constructor listed under the wrong capability kind, a duplicate tool or prompt name, or a duplicate resource URI.
 
@@ -83,10 +98,10 @@ The initial application configuration is intentionally small:
 ```ts
 export const providers = {
   services: [CalculatorService],
-} satisfies ProviderConfiguration;
+} satisfies IProviderConfiguration;
 ```
 
-`ProviderConfiguration` is exported by `src/core/container.ts`. It contains `services: readonly Newable<unknown>[]` and an optional `configure(container: Container): void` callback. `createAppContainer` binds `services` first, invokes `configure` second, and binds capability constructors last. The callback is absent from the starter runtime configuration and is exercised only by focused tests and documentation until an application needs a non-default binding.
+`IProviderConfiguration` is exported by `src/core/container.ts`. It contains `services: readonly Newable<unknown>[]` and an optional `configure(container: Container): void` callback. `createAppContainer` binds `services` first, invokes `configure` second, and binds capability constructors last. The callback is absent from the starter runtime configuration and is exercised only by focused tests and documentation until an application needs a non-default binding.
 
 A transient constructor dependency is new per capability resolution, not per MCP handler call. For a fresh dependency on every invocation, inject a factory function and bind it with Inversify `toFactory`; the factory resolves a transient service each time it is called. The starter documents and tests this provider pattern, but the runtime `AddTool` sample uses direct constructor injection because per-call calculators would be artificial.
 
@@ -111,7 +126,7 @@ The container is a composition-root concern. Core MCP registration receives reso
 
 SDK v2 handlers receive a second argument: a request context. Progress, cancellation, MCP logging, and later auth/elicitation live on `ctx.mcpReq` (`signal`, `notify`, `log`, `_meta`). Do not invent a parallel context type.
 
-Alias the SDK's second-argument type in `src/core/types.ts` as `McpRequestExtra` (whatever `registerTool` / `registerResource` / `registerPrompt` actually export; likely a context object with `mcpReq`). Registration wrappers must forward that object unchanged.
+Alias the SDK's second-argument type in `src/core/types/handler.types.ts` as `McpRequestExtraType` (whatever `registerTool` / `registerResource` / `registerPrompt` actually export; likely a context object with `mcpReq`). Registration wrappers must forward that object unchanged.
 
 The extra parameter is **optional** on every handler. Samples omit it. A later tool can use `extra.mcpReq.signal` or `extra.mcpReq.notify` without changing core.
 
@@ -135,34 +150,34 @@ type JsonObject = { readonly [key: string]: JsonValue };
 type JsonArray = readonly JsonValue[];
 type JsonValue = JsonPrimitive | JsonObject | JsonArray;
 
-type ToolHandlerResult<TOutput extends JsonObject> = TOutput | CallToolResult;
-type ResourceHandlerResult<T extends JsonValue = JsonValue> =
+type ToolHandlerResultType<TOutput extends JsonObject> = TOutput | CallToolResult;
+type ResourceHandlerResultType<T extends JsonValue = JsonValue> =
   | T
   | { contents: ResourceContents[] };
-type PromptHandlerResult = string | { messages: PromptMessage[] };
+type PromptHandlerResultType = string | { messages: PromptMessage[] };
 
-interface McpToolHandler {
+interface IMcpToolHandler {
   handler(
     input: unknown,
-    extra?: McpRequestExtra,
-  ): ToolHandlerResult<JsonObject> | Promise<ToolHandlerResult<JsonObject>>;
+    extra?: McpRequestExtraType,
+  ): ToolHandlerResultType<JsonObject> | Promise<ToolHandlerResultType<JsonObject>>;
 }
 
-interface McpResourceHandler {
+interface IMcpResourceHandler {
   handler(
     uri: string,
-    extra?: McpRequestExtra,
-  ): ResourceHandlerResult | Promise<ResourceHandlerResult>;
+    extra?: McpRequestExtraType,
+  ): ResourceHandlerResultType | Promise<ResourceHandlerResultType>;
 }
 
-interface McpPromptHandler {
+interface IMcpPromptHandler {
   handler(
     args: unknown,
-    extra?: McpRequestExtra,
-  ): PromptHandlerResult | Promise<PromptHandlerResult>;
+    extra?: McpRequestExtraType,
+  ): PromptHandlerResultType | Promise<PromptHandlerResultType>;
 }
 
-interface ToolMetadata<
+interface IToolMetadata<
   TInputSchema extends z.ZodType,
   TOutputSchema extends z.ZodType<JsonObject>,
 > {
@@ -297,10 +312,10 @@ Capability composition stores constructors, not instances. All heterogeneous cla
 ```ts
 import type { Newable } from "inversify";
 
-interface CapabilityTypes {
-  readonly tools: readonly Newable<McpToolHandler>[];
-  readonly prompts: readonly Newable<McpPromptHandler>[];
-  readonly resources: readonly Newable<McpResourceHandler>[];
+interface ICapabilities {
+  readonly tools: readonly Newable<IMcpToolHandler>[];
+  readonly prompts: readonly Newable<IMcpPromptHandler>[];
+  readonly resources: readonly Newable<IMcpResourceHandler>[];
 }
 ```
 
@@ -311,7 +326,7 @@ The non-generic handler interfaces are the erased runtime invocation boundary. T
 `getCapabilityTypes()` returns this explicit list. It is the only registration list: decorators do not create a hidden registry and the resolver does not scan folders or imports.
 
 ```ts
-export function getCapabilityTypes(): CapabilityTypes {
+export function getCapabilityTypes(): ICapabilities {
   return {
     tools: [AddTool],
     prompts: [CodeReviewPrompt],
@@ -320,9 +335,9 @@ export function getCapabilityTypes(): CapabilityTypes {
 }
 ```
 
-Resolution reads discriminated metadata from the shared constructor-metadata store, asks the per-server container for each instance, and produces internal resolved records containing metadata plus the handler instance. `Capabilities` is the resolved runtime shape consumed by `register-capabilities.ts`; it is not exported as the authoring API. Registration iterates those records and passes decorator-owned schemas to the SDK.
+Resolution reads discriminated metadata from the shared constructor-metadata store, asks the per-server container for each instance, and produces internal resolved records containing metadata plus the handler instance. `IResolvedCapabilities` is the resolved runtime shape consumed by `register-capabilities.ts`; it is not exported as the authoring API. Registration iterates those records and passes decorator-owned schemas to the SDK.
 
-Prove this with type-only tests in `src/core/capabilities.types.spec.ts`: two decorated tool classes with different schemas and constructor dependencies must be assignable to `CapabilityTypes["tools"]` without casts. Negative compile-time fixtures must prove that a decorator rejects a handler whose annotated input or output is incompatible with its schemas. A compile-time integration fixture must cover the complete constructor-list -> resolution -> erased invocation -> registration path without per-capability casts. Runtime tests must prove missing or wrong decorators and duplicate identifiers fail before server registration.
+Prove this with type-only tests in `src/core/capabilities.types.spec.ts`: two decorated tool classes with different schemas and constructor dependencies must be assignable to `ICapabilities["tools"]` without casts. Negative compile-time fixtures must prove that a decorator rejects a handler whose annotated input or output is incompatible with its schemas. A compile-time integration fixture must cover the complete constructor-list -> resolution -> erased invocation -> registration path without per-capability casts. Runtime tests must prove missing or wrong decorators and duplicate identifiers fail before server registration.
 
 ## Server factory (stdio and later HTTP)
 
@@ -391,7 +406,7 @@ Shutdown rules:
 `src/capabilities/capabilities.ts`:
 
 ```ts
-export function getCapabilityTypes(): CapabilityTypes {
+export function getCapabilityTypes(): ICapabilities {
   return {
     tools: [AddTool],
     prompts: [CodeReviewPrompt],
@@ -404,7 +419,7 @@ export function getCapabilityTypes(): CapabilityTypes {
 
 ## Samples (easy to delete when copying)
 
-- **Tool `add`:** `{ a, b }` numbers, returns `{ result: number }`. Text content is `JSON.stringify` of that object, e.g. `{"result":3}`. `AddTool` is decorated only with `@tool(...)`, which applies Inversify injectable metadata internally. It implements the non-generic `McpToolHandler`, injects `CalculatorService` by its concrete class token, explicitly annotates `handler(input: AddToolInput): AddToolOutput`, and does not take `extra`.
+- **Tool `add`:** `{ a, b }` numbers, returns `{ result: number }`. Text content is `JSON.stringify` of that object, e.g. `{"result":3}`. `AddTool` is decorated only with `@tool(...)`, which applies Inversify injectable metadata internally. It implements the non-generic `IMcpToolHandler`, injects `CalculatorService` by its concrete class token, explicitly annotates `handler(input: AddToolInputType): AddToolOutputType`, and does not take `extra`.
 - **Resource `project://info`:** static project blurb as a **string**. Listing and contents MIME are `text/plain`. A later JSON resource returns a plain object and gets `application/json` from the mapper.
 - **Prompt `code_review`:** `{ code: string }`, optional `role: "user"`, returns the review instruction **string**. Core wraps it as one user text message. Mixed-role / image prompts are allowed by the contract; this sample does not use them.
 
@@ -457,16 +472,14 @@ flowchart LR
 
 ## Tooling
 
-- **TypeScript** ESM, `strict`, `module` / `moduleResolution` `NodeNext`, `types: ["node"]` (required by SDK v2), plus the verified Inversify legacy-decorator settings (`experimentalDecorators` and `emitDecoratorMetadata`). Load `reflect-metadata` once before decorated modules are evaluated if required by the pinned Inversify version.
-- Specs are co-located (`*.spec.ts`). Do not emit them into `dist/`. Use two configs:
-  - `tsconfig.json`: include all of `src/` (app + specs) for the editor and Vitest.
-  - `tsconfig.build.json`: extends `tsconfig.json`, `exclude` `**/*.spec.ts` (and `node_modules`, `dist`). `noEmit` false, `outDir` `dist`, `rootDir` `src`.
-- `build` is `tsc -p tsconfig.build.json`. Never `tsc -p tsconfig.json` for the published/runnable output. After build, `dist/` must not contain `*.spec.js`.
+- **TypeScript** ESM, `strict`, `module` `Preserve` / `moduleResolution` `Bundler`, `types: ["node"]` (required by SDK v2), plus the verified Inversify legacy-decorator setting (`experimentalDecorators`). Author imports without `.ts` extensions; the bundler resolves them. Load `reflect-metadata` once before decorated modules are evaluated if required by the pinned Inversify version.
+- Specs are co-located (`*.spec.ts`) and are never bundled into `dist/`. One `tsconfig.json` covers all of `src/` (app + specs) for the editor, `tsc --noEmit`, and Vitest.
+- `build` is `tsup`, configured by `tsup.config.ts` to bundle `src/main.ts` into a single `dist/main.js` (ESM, Node 20 target, sourcemaps). `tsc` is used only for type checking, never for emitting.
 - **Zod 4** (`zod` / `zod/v4`) for all input, output, and prompt args. Types via `z.output` / `z.infer` from the schema constants.
 - **Inversify** for constructor injection and binding lifetimes. Use one container per server with singleton as the default binding scope, an application-owned provider list for ordinary concrete self-bindings, optional custom provider bindings for explicit transient overrides and tokens, and `toFactory` only when a dependency must be created per handler invocation. Project-owned capability decorators apply `injectable()` internally but do not bind, discover, or auto-register the decorated class.
 - **Biome** for lint + format. No ESLint/Prettier.
-- **Vitest** for `*.spec.ts` (handler + schema tests; decorator metadata and type-safety tests; provider-list binding, container lifetime, and factory-provider tests; core mapper tests for domain wrap, wire pass-through, and resource serialization success/failure). Extra is optional, so a one-argument sample handler remains valid. Vitest uses `tsconfig.json`, not the build config. No automated live Cursor/MCP integration test.
-- **Node 20+**. Scripts: `build` (`tsc -p tsconfig.build.json`), `dev` (`tsx src/main.ts`), `start` (`node dist/main.js`), `lint`, `format`, `test`.
+- **Vitest** for `*.spec.ts` (handler + schema tests; decorator metadata and type-safety tests; provider-list binding, container lifetime, and factory-provider tests; core mapper tests for domain wrap, wire pass-through, and resource serialization success/failure). Extra is optional, so a one-argument sample handler remains valid. Vitest uses `tsconfig.json`. No automated live Cursor/MCP integration test.
+- **Node 20+**. Scripts: `build` (`tsup`), `dev` (`tsx src/main.ts`), `start` (`node dist/main.js`), `lint`, `format`, `test`.
 - Package name stays `mcp-framework` to match the folder. `bin` points at `dist/main.js`. README says: when you copy this, rename `package.json` `name`, `bin`, and the `McpServer` name.
 
 Cursor stdio config (local starter):

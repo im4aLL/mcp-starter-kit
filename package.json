@@ -11,12 +11,13 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsup",
     "dev": "tsx src/main.ts",
     "start": "node dist/main.js",
     "lint": "biome check .",
     "format": "biome format --write .",
-    "test": "vitest run"
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "npm run typecheck && vitest run"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.0.0",
@@ -28,6 +29,7 @@
   "devDependencies": {
     "@biomejs/biome": "2.5.14",
     "@types/node": "24.13.3",
+    "tsup": "^8.5.1",
     "tsx": "4.23.15",
     "typescript": "6.0.3",
     "vitest": "4.1.11"

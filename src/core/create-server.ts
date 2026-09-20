@@ -1,20 +1,23 @@
 import { McpServer } from "@modelcontextprotocol/server";
 
-// Name advertised to MCP clients during initialization.
-export const SERVER_NAME = "mcp-framework";
-
-// Version advertised to MCP clients during initialization.
-export const SERVER_VERSION = "0.1.0";
+import { registerCapabilities } from "./register-capabilities";
+import type { IResolvedCapabilities, IServerConfig } from "./types";
 
 /**
- * Creates a transport-independent, empty MCP server.
+ * Creates a transport-independent MCP server with resolved capabilities.
  *
- * The server advertises only its name and version: tool, resource, and prompt
- * registration belong to later tasks. Each call returns a new instance so the
- * stdio factory can build a fresh server per protocol negotiation.
+ * Each call returns a new instance so the stdio factory can build a fresh
+ * server per protocol negotiation. IResolvedCapabilities are already resolved through a
+ * per-server container by the caller; this function only registers them.
  *
- * @returns A new {@link McpServer} instance with no registered capabilities.
+ * @param capabilities - Resolved runtime capabilities to register.
+ * @param config - Caller-owned server identity advertised to MCP clients.
+ * @returns A new {@link McpServer} instance with capabilities registered.
  */
-export function createServer(): McpServer {
-  return new McpServer({ name: SERVER_NAME, version: SERVER_VERSION });
+export function createServer(capabilities: IResolvedCapabilities, config: IServerConfig): McpServer {
+  const server = new McpServer({ name: config.name, version: config.version });
+
+  registerCapabilities(server, capabilities);
+
+  return server;
 }

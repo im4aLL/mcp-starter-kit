@@ -70,9 +70,9 @@ Task 00 establishes a real protocol process and verifies the Inversify and decor
 ## Global implementation rules
 
 - Use `@modelcontextprotocol/server` v2 and Zod 4 after verifying the live package APIs and compatible versions during task 00. Do not use `@modelcontextprotocol/sdk` v1.
-- Keep TypeScript ESM strict with `NodeNext`, Node types, Node 20 or newer, Biome, Vitest, and separate editor/test and build TypeScript configurations.
+- Keep TypeScript ESM strict with `Preserve` module and `Bundler` module resolution, Node types, Node 20 or newer, Biome, and Vitest. Use one `tsconfig.json` for the editor, tests, and type checking; `tsup` produces the bundled `dist` output.
 - Use the SDK to apply tool input/output schemas and prompt argument schemas. Core registration and mapping code must never call `.parse()`.
-- Keep sample method parameters and returns explicitly annotated with schema-derived types while capability classes implement non-generic `McpToolHandler`, `McpPromptHandler`, or `McpResourceHandler` interfaces. Typed decorators must enforce schema compatibility.
+- Keep sample method parameters and returns explicitly annotated with schema-derived types while capability classes implement non-generic `IMcpToolHandler`, `IMcpPromptHandler`, or `IMcpResourceHandler` interfaces. Typed decorators must enforce schema compatibility.
 - Keep MCP metadata on constructors through project-owned decorators. Each capability decorator also applies Inversify injectable metadata, so do not repeat `@injectable()` on capability classes. Do not add instance metadata fields, automatic discovery, source scanning, or a hidden registry.
 - Keep `getCapabilityTypes()` as the explicit constructor composition and resolve it through one new Inversify container per application server.
 - Keep ordinary application service constructors and exceptional custom bindings in `src/providers.ts`; do not add application service imports to generic `src/core/container.ts`.

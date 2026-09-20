@@ -24,7 +24,7 @@ A normal consumer does not select dependency lifetime:
   inputSchema: AddToolInputSchema,
   outputSchema: AddToolOutputSchema,
 })
-export class AddTool implements McpToolHandler {
+export class AddTool implements IMcpToolHandler {
   /**
    * Creates an add tool.
    *
@@ -41,7 +41,7 @@ export class AddTool implements McpToolHandler {
    * @param input - Validated tool input.
    * @returns The structured addition result.
    */
-  public handler(input: AddToolInput): AddToolOutput {
+  public handler(input: AddToolInputType): AddToolOutputType {
     return {
       result: this.calculator.add(input.a, input.b),
     };
@@ -54,7 +54,7 @@ The composition root chooses singleton or transient scope without changing `AddT
 ```ts
 export const providers = {
   services: [CalculatorService],
-} satisfies ProviderConfiguration;
+} satisfies IProviderConfiguration;
 ```
 
 An application that wants one instance per capability resolution omits that service from the ordinary list and supplies a custom binding from `src/providers.ts`:
@@ -74,7 +74,7 @@ export const providers = {
       .toSelf()
       .inTransientScope();
   },
-} satisfies ProviderConfiguration;
+} satisfies IProviderConfiguration;
 ```
 
 A transient constructor dependency is retained by its resolved capability. When a new service is required for every `handler()` call, inject a factory function instead. Both the transient service binding and factory binding belong in application-owned `src/providers.ts`; developers must not add them to `src/core/container.ts`:
@@ -106,7 +106,7 @@ export const providers = {
         return () => context.get(CalculatorService);
       });
   },
-} satisfies ProviderConfiguration;
+} satisfies IProviderConfiguration;
 ```
 
 The corresponding alternate tool class is:
@@ -121,7 +121,7 @@ The corresponding alternate tool class is:
   inputSchema: AddToolInputSchema,
   outputSchema: AddToolOutputSchema,
 })
-export class AddTool implements McpToolHandler {
+export class AddTool implements IMcpToolHandler {
   /**
    * Creates an add tool.
    *
@@ -138,7 +138,7 @@ export class AddTool implements McpToolHandler {
    * @param input - Validated tool input.
    * @returns The structured addition result.
    */
-  public handler(input: AddToolInput): AddToolOutput {
+  public handler(input: AddToolInputType): AddToolOutputType {
     const calculator = this.createCalculator();
 
     return {
@@ -152,15 +152,15 @@ This factory-based class is documentation and a test fixture, not a second runti
 
 ## Implementation
 
-- [ ] Resolve `McpRequestExtra` from the verified SDK v2 registration callback type instead of inventing a parallel context. Keep it optional on all non-generic handler interfaces and decorator target contracts.
-- [ ] Finalize `McpToolHandler`, `McpResourceHandler`, and `McpPromptHandler` as concise non-generic authoring contracts and the erased runtime invocation boundary. Use method syntax and `unknown` for schema-owned arguments so resolved registration can invoke handlers, while schema-specific input and output types remain on each class method and in each typed decorator target constraint.
-- [ ] Finalize typed `ToolMetadata`, `ResourceMetadata`, and `PromptMetadata`, Inversify `Newable`-based `CapabilityTypes`, internal resolved capability records, and runtime `Capabilities`. Metadata is readonly and remains separate from handler instances. Constrain tool output schemas and domain outputs to JSON objects because MCP `structuredContent` is object-shaped.
-- [ ] Finalize `ProviderConfiguration` with a readonly concrete `services` constructor list and an optional custom binding callback. Keep `src/providers.ts` as the application-owned composition point and `src/core/container.ts` generic. Bind ordinary services first, custom bindings second, and capabilities last. Document that developers select non-default lifetimes, including transient services and per-invocation factories, in `src/providers.ts` without editing `src/core/container.ts`, and that custom-bound services must be omitted from `services` to avoid duplicate bindings.
+- [ ] Resolve `McpRequestExtraType` from the verified SDK v2 registration callback type instead of inventing a parallel context. Keep it optional on all non-generic handler interfaces and decorator target contracts.
+- [ ] Finalize `IMcpToolHandler`, `IMcpResourceHandler`, and `IMcpPromptHandler` as concise non-generic authoring contracts and the erased runtime invocation boundary. Use method syntax and `unknown` for schema-owned arguments so resolved registration can invoke handlers, while schema-specific input and output types remain on each class method and in each typed decorator target constraint.
+- [ ] Finalize typed `IToolMetadata`, `ResourceMetadata`, and `PromptMetadata`, Inversify `Newable`-based `ICapabilities`, internal resolved capability records, and runtime `IResolvedCapabilities`. Metadata is readonly and remains separate from handler instances. Constrain tool output schemas and domain outputs to JSON objects because MCP `structuredContent` is object-shaped.
+- [ ] Finalize `IProviderConfiguration` with a readonly concrete `services` constructor list and an optional custom binding callback. Keep `src/providers.ts` as the application-owned composition point and `src/core/container.ts` generic. Bind ordinary services first, custom bindings second, and capabilities last. Document that developers select non-default lifetimes, including transient services and per-invocation factories, in `src/providers.ts` without editing `src/core/container.ts`, and that custom-bound services must be omitted from `services` to avoid duplicate bindings.
 - [ ] Finalize `@tool`, `@resource`, and `@prompt` around one shared discriminated constructor-metadata store. Before applying Inversify's bare `injectable()` decorator, each decorator must reject a constructor already marked by another capability decorator with a contextual class-evaluation error. Apply `injectable()` without selecting a scope, store immutable metadata keyed by the exact constructor, and never replace constructors, mutate prototypes beyond Inversify metadata, bind classes, register globally, discover modules, or inherit capability metadata implicitly. Document that combining an explicit `@injectable()` with a capability decorator is unsupported and fails during class evaluation.
 - [ ] Validate the explicit constructor lists before MCP registration. Reject missing metadata, a constructor listed under the wrong capability kind, duplicate tool names, duplicate prompt names, and duplicate resource URIs with contextual startup errors.
 - [ ] Ensure registration callbacks pass SDK-applied arguments and the exact same `extra` object to resolved tool, resource, and prompt handlers. Core must not call input, output, or argument schema `.parse()`.
-- [ ] Add `src/core/capabilities.types.spec.ts` with a second decorated test-only tool whose schemas and constructor dependencies differ from `AddTool`. Prove both constructors are assignable to `CapabilityTypes["tools"]` without casts and that the complete constructor-list, resolution, erased invocation, and registration path type-checks without per-capability assertions.
-- [ ] Add negative type fixtures proving the typed decorators reject incompatible handler input and output annotations. Prove the real classes retain schema-derived method types despite using `implements McpToolHandler`, `implements McpPromptHandler`, and `implements McpResourceHandler` without generic arguments, and prove capability classes do not need a second `@injectable()` decorator.
+- [ ] Add `src/core/capabilities.types.spec.ts` with a second decorated test-only tool whose schemas and constructor dependencies differ from `AddTool`. Prove both constructors are assignable to `ICapabilities["tools"]` without casts and that the complete constructor-list, resolution, erased invocation, and registration path type-checks without per-capability assertions.
+- [ ] Add negative type fixtures proving the typed decorators reject incompatible handler input and output annotations. Prove the real classes retain schema-derived method types despite using `implements IMcpToolHandler`, `implements IMcpPromptHandler`, and `implements IMcpResourceHandler` without generic arguments, and prove capability classes do not need a second `@injectable()` decorator.
 - [ ] Add registration tests using transformed test-only schemas to prove transforms execute once in the SDK and handlers receive schema output values. Do not add a transformed runtime sample.
 - [ ] Add identity assertions for request-extra forwarding across tools, resources, and prompts, including access to the verified `mcpReq` fields without wrapping.
 - [ ] Test provider and container scope policy: every ordinary constructor listed in `providers.services` is self-bound and singleton within one application container, an explicit custom `.inTransientScope()` binding returns separate instances across capability resolutions, a custom-bound service is not also listed as an ordinary service, and two application containers never share singleton instances.
@@ -172,7 +172,7 @@ This factory-based class is documentation and a test fixture, not a second runti
 ## Acceptance criteria
 
 - [ ] Two differently typed and dependency-bearing tool constructors compile in one readonly capability list without casts.
-- [ ] A class can use only `@tool(...)` plus `implements McpToolHandler` without `@injectable()` or schema generic arguments, while its explicitly annotated handler remains checked against the metadata schemas and its constructor dependencies resolve through Inversify.
+- [ ] A class can use only `@tool(...)` plus `implements IMcpToolHandler` without `@injectable()` or schema generic arguments, while its explicitly annotated handler remains checked against the metadata schemas and its constructor dependencies resolve through Inversify.
 - [ ] A bare numeric return does not compile when `AddToolOutputSchema` describes `{ result: number }`, and top-level scalar tool output schemas are rejected because MCP structured tool output must be an object.
 - [ ] Sample handlers can omit `extra`, while an extra-aware test capability receives the original SDK object by identity.
 - [ ] Tool output, tool input, and prompt argument schemas come from decorator metadata, are registered with the SDK, and are never parsed in core code.

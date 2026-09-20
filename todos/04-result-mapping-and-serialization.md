@@ -12,7 +12,7 @@ Capability authors can use the simple domain-return path or return supported SDK
 
 ## Implementation
 
-- [ ] Finalize `ToolHandlerResult`, `ResourceHandlerResult`, and `PromptHandlerResult` unions using the verified SDK v2 result and content types.
+- [ ] Finalize `ToolHandlerResultType`, `ResourceHandlerResultType`, and `PromptHandlerResultType` unions using the verified SDK v2 result and content types.
 - [ ] Add narrow structural guards for `CallToolResult`, resource `{ contents }`, and prompt `{ messages }`. Keep the documented limitation that a structured tool output containing a content-block array is interpreted as wire format.
 - [ ] Make `mapToolResult` return SDK wire results unchanged and otherwise return one JSON text content block plus the original structured output.
 - [ ] Make `mapResourceResult` return SDK contents unchanged before applying the string and JSON-value domain serialization paths.

@@ -13,7 +13,7 @@ A developer can clone or copy the starter, install it cleanly, run all checks, b
 ## Implementation
 
 - [ ] Review co-located specs and close behavior gaps for sample handlers and schemas, decorator metadata and type safety, constructor-list composition, dependency injection and scope behavior, domain and wire result mapping, resource serialization, registration, schema ownership, extra forwarding, per-server isolation, transport errors, and shutdown. Extend existing tests rather than duplicating fixtures.
-- [ ] Verify `tsconfig.json` covers application plus specs and Vitest, while `tsconfig.build.json` emits only runnable source beneath `dist` with correct NodeNext imports and source layout.
+- [ ] Verify `tsconfig.json` covers application plus specs, Vitest, and type checking, while `tsup` bundles only runnable source into a single `dist/main.js` with correct imports and no spec files.
 - [ ] Verify the package `bin` points to `dist/main.js`, the emitted entry retains a shebang, and `npm run start` plus local package-bin execution work from outside the repository working directory.
 - [ ] Run a clean install from the committed lockfile and execute lint, test, build, and start checks on Node 20 or the newer supported baseline selected in task 00.
 - [ ] Run `npm pack --dry-run` and inspect the file list. Exclude tests, local logs, secrets, editor state, and unintended artifacts while retaining required runtime files.
