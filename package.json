@@ -1,0 +1,35 @@
+{
+  "name": "mcp-framework",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Copyable class-based MCP server starter built on @modelcontextprotocol/server v2.",
+  "type": "module",
+  "bin": {
+    "mcp-framework": "dist/main.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsx src/main.ts",
+    "start": "node dist/main.js",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.0.0",
+    "inversify": "8.2.3",
+    "pino": "10.3.1",
+    "reflect-metadata": "0.2.2",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.14",
+    "@types/node": "24.13.3",
+    "tsx": "4.23.15",
+    "typescript": "6.0.3",
+    "vitest": "4.1.11"
+  }
+}
