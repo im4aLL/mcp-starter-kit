@@ -1,6 +1,6 @@
 # 03 - Code review prompt
 
-Status: [ ] Not started
+Status: [x] Done
 
 Source: `PLAN.md` sections "Core contract", "Schema ownership", "Handler results: domain default, wire pass-through", "Decorated capability constructors and resolved collections", and "Samples (easy to delete when copying)".
 
@@ -54,32 +54,32 @@ export function getCapabilityTypes(): ICapabilities {
 
 ## Implementation
 
-- [ ] Add `src/prompts/code-review/code-review.schemas.ts` with a transform-free Zod 4 object schema requiring `code: string`.
-- [ ] Add the schema-derived `CodeReviewPromptArgs` type in `code-review.types.ts`.
-- [ ] Add non-generic prompt handler, prompt metadata, constructor-list, and resolved-prompt contracts to `src/core/types.ts`. Handler arguments remain schema-specific through the class method annotation and typed decorator constraint rather than a generic implements clause.
-- [ ] Add a typed `@prompt` decorator and direct metadata reader to `src/core/decorators.ts`. Have `@prompt` apply Inversify's `injectable()` metadata internally, constrain the decorated handler to accept `z.output<TArgsSchema>` and an allowed prompt result, and store `role` as string-shortcut metadata only.
-- [ ] Add `CodeReviewPrompt` in the target shape above with only `@prompt(...)`, `implements IMcpPromptHandler`, and an explicitly annotated schema-derived handler argument. Do not repeat `@injectable()` on the capability class.
-- [ ] Extend `getCapabilityTypes()` with `CodeReviewPrompt`, bind the listed prompt constructor in the per-server container, resolve it through the common resolver, and register its decorator-owned description, argument schema, role, and callback.
-- [ ] Forward the SDK callback's second argument unchanged to the resolved instance's `handler(args, extra)` and do not call `.parse()` in core.
-- [ ] Extend `map-results.ts` so a string prompt result becomes one text message using the decorator metadata role, defaulting to `user`.
-- [ ] Add schema, handler, decorator metadata, container resolution, mapper, and registration specs, including SDK rejection of missing or invalid `code` before handler execution.
-- [ ] Add TSDoc above every introduced function, class, and class method.
+- [x] Add `src/prompts/code-review/code-review.schemas.ts` with a transform-free Zod 4 object schema requiring `code: string`.
+- [x] Add the schema-derived `CodeReviewPromptArgs` type in `code-review.types.ts`.
+- [x] Add non-generic prompt handler, prompt metadata, constructor-list, and resolved-prompt contracts to `src/core/types.ts`. Handler arguments remain schema-specific through the class method annotation and typed decorator constraint rather than a generic implements clause.
+- [x] Add a typed `@prompt` decorator and direct metadata reader to `src/core/decorators.ts`. Have `@prompt` apply Inversify's `injectable()` metadata internally, constrain the decorated handler to accept `z.output<TArgsSchema>` and an allowed prompt result, and store `role` as string-shortcut metadata only.
+- [x] Add `CodeReviewPrompt` in the target shape above with only `@prompt(...)`, `implements IMcpPromptHandler`, and an explicitly annotated schema-derived handler argument. Do not repeat `@injectable()` on the capability class.
+- [x] Extend `getCapabilityTypes()` with `CodeReviewPrompt`, bind the listed prompt constructor in the per-server container, resolve it through the common resolver, and register its decorator-owned description, argument schema, role, and callback.
+- [x] Forward the SDK callback's second argument unchanged to the resolved instance's `handler(args, extra)` and do not call `.parse()` in core.
+- [x] Extend `map-results.ts` so a string prompt result becomes one text message using the decorator metadata role, defaulting to `user`.
+- [x] Add schema, handler, decorator metadata, container resolution, mapper, and registration specs, including SDK rejection of missing or invalid `code` before handler execution.
+- [x] Add TSDoc above every introduced function, class, and class method.
 
 ## Acceptance criteria
 
-- [ ] MCP discovery exposes exactly one prompt named `code_review` with its decorator-owned description and argument schema.
-- [ ] A valid retrieval returns one user message with text containing the supplied code and review instruction.
-- [ ] Missing or invalid code is rejected by the SDK before `CodeReviewPrompt.handler` runs.
-- [ ] The core does not treat the sample's role as a restriction on future mixed-role SDK message results.
-- [ ] `CodeReviewPrompt` is explicitly listed as a constructor and resolved from the same per-server container as the tool and resource.
+- [x] MCP discovery exposes exactly one prompt named `code_review` with its decorator-owned description and argument schema.
+- [x] A valid retrieval returns one user message with text containing the supplied code and review instruction.
+- [x] Missing or invalid code is rejected by the SDK before `CodeReviewPrompt.handler` runs.
+- [x] The core does not treat the sample's role as a restriction on future mixed-role SDK message results.
+- [x] `CodeReviewPrompt` is explicitly listed as a constructor and resolved from the same per-server container as the tool and resource.
 
 ## Verification
 
-- [ ] Run lint, tests, and build.
-- [ ] Use Inspector or a real SDK client to list `code_review` and retrieve it with a representative code snippet.
-- [ ] Inspect the returned message role, content type, and text.
-- [ ] Request the prompt with invalid arguments and verify schema failure plus noninvocation of the handler.
-- [ ] Confirm metadata listing does not instantiate `CodeReviewPrompt` and runtime resolution does.
+- [x] Run lint, tests, and build.
+- [x] Use Inspector or a real SDK client to list `code_review` and retrieve it with a representative code snippet.
+- [x] Inspect the returned message role, content type, and text.
+- [x] Request the prompt with invalid arguments and verify schema failure plus noninvocation of the handler.
+- [x] Confirm metadata listing does not instantiate `CodeReviewPrompt` and runtime resolution does.
 
 ## Deliberately deferred
 
