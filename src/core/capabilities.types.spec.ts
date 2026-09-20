@@ -2,11 +2,14 @@ import { inject, injectable } from "inversify";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
-import { getCapabilityTypes } from "../capabilities/capabilities";
-import { serverConfig } from "../config";
-import { providers } from "../providers";
-import { AddTool } from "../tools/add-tool/add-tool";
 import { createAppContainer } from "./container";
+import {
+  FixtureAddTool,
+  FixtureProjectInfoResource,
+  fixtureCapabilities,
+  fixtureProviders,
+  fixtureServerConfig,
+} from "./core-test-fixtures";
 import { createServer } from "./create-server";
 import { tool } from "./decorators";
 import { resolveCapabilities } from "./resolve-capabilities";
@@ -87,27 +90,38 @@ class BadTool implements IMcpToolHandler {
   }
 }
 
-// Heterogeneous decorated constructors share one constructor list without casts.
-const heterogeneousTools: ICapabilities["tools"] = [AddTool, ConvertTool];
+const heterogeneousTools: ICapabilities["tools"] = [FixtureAddTool, ConvertTool];
+const heterogeneousResources: ICapabilities["resources"] = [FixtureProjectInfoResource];
 
 describe("capability type integration", () => {
   it("accepts heterogeneous decorated constructors in one list", () => {
     expect(heterogeneousTools).toHaveLength(2);
-    expect(heterogeneousTools[0]).toBe(AddTool);
+    expect(heterogeneousTools[0]).toBe(FixtureAddTool);
+    expect(heterogeneousResources).toHaveLength(1);
+    expect(heterogeneousResources[0]).toBe(FixtureProjectInfoResource);
   });
 
-  it("resolves, invokes the erased handler, and registers AddTool without casts", async () => {
-    const capabilityTypes = getCapabilityTypes();
-    const container = createAppContainer(capabilityTypes, providers);
-    const capabilities = resolveCapabilities(container, capabilityTypes);
-    const server = createServer(capabilities, serverConfig);
+  it("resolves, invokes the erased handler, and registers the fixture tool without casts", async () => {
+    const container = createAppContainer(fixtureCapabilities, fixtureProviders);
+    const capabilities = resolveCapabilities(container, fixtureCapabilities);
+    const server = createServer(capabilities, fixtureServerConfig);
 
     const resolved = capabilities.tools[0];
     const output = await resolved?.instance.handler({ a: 1, b: 2 });
 
-    expect(resolved?.instance).toBeInstanceOf(AddTool);
+    expect(resolved?.instance).toBeInstanceOf(FixtureAddTool);
     expect(output).toEqual({ result: 3 });
     expect(server).toBeDefined();
+  });
+
+  it("resolves and invokes the erased resource handler without casts", () => {
+    const container = createAppContainer(fixtureCapabilities, fixtureProviders);
+    const capabilities = resolveCapabilities(container, fixtureCapabilities);
+    const resource = capabilities.resources[0];
+
+    expect(fixtureCapabilities.resources).toContain(FixtureProjectInfoResource);
+    expect(resource?.instance).toBeInstanceOf(FixtureProjectInfoResource);
+    expect(resource?.instance.handler("project://info")).toBe("A class-based MCP server starter.");
   });
 
   it("keeps the negative fixture reachable for the compile-time assertion", () => {

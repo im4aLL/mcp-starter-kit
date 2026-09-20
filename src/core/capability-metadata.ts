@@ -2,7 +2,7 @@ import "reflect-metadata";
 
 import type { Newable } from "inversify";
 
-import type { IStoredCapabilityMetadata } from "./decorators/decorators.types";
+import type { StoredCapabilityMetadataType } from "./decorators/decorators.types";
 
 // Single shared metadata key every capability decorator reads and writes.
 const capabilityMetadataKey = Symbol("mcp-framework.capability-metadata");
@@ -30,8 +30,8 @@ export function assertNotDecorated(target: Newable<unknown>): void {
  * @param target - Constructor to read.
  * @returns The stored capability metadata, or `undefined` when there is none.
  */
-export function getStoredCapabilityMetadata(target: Newable<unknown>): IStoredCapabilityMetadata | undefined {
-  return Reflect.getOwnMetadata(capabilityMetadataKey, target) as IStoredCapabilityMetadata | undefined;
+export function getStoredCapabilityMetadata(target: Newable<unknown>): StoredCapabilityMetadataType | undefined {
+  return Reflect.getOwnMetadata(capabilityMetadataKey, target) as StoredCapabilityMetadataType | undefined;
 }
 
 /**
@@ -40,6 +40,6 @@ export function getStoredCapabilityMetadata(target: Newable<unknown>): IStoredCa
  * @param target - Constructor receiving the metadata.
  * @param stored - Frozen capability metadata to store.
  */
-export function storeCapabilityMetadata(target: Newable<unknown>, stored: IStoredCapabilityMetadata): void {
+export function storeCapabilityMetadata(target: Newable<unknown>, stored: StoredCapabilityMetadataType): void {
   Reflect.defineMetadata(capabilityMetadataKey, stored, target);
 }

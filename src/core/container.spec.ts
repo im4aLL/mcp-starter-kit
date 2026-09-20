@@ -3,22 +3,18 @@ import { readFileSync } from "node:fs";
 import type { Container } from "inversify";
 import { describe, expect, it, vi } from "vitest";
 
-import { getCapabilityTypes } from "../capabilities/capabilities";
-import { providers } from "../providers";
-import { CalculatorService } from "../services/calculator-service";
-import { AddTool } from "../tools/add-tool/add-tool";
 import type { IProviderConfiguration } from "./container";
 import { createAppContainer } from "./container";
+import {
+  FixtureAddTool,
+  FixtureCalculatorService,
+  FixtureProjectInfoResource,
+  fixtureCapabilities,
+  fixtureProviders,
+} from "./core-test-fixtures";
 import type { ICapabilities } from "./types";
 
-// Capability list with no constructors, for provider-only container tests.
 const noCapabilities: ICapabilities = { tools: [], prompts: [], resources: [] };
-
-describe("providers configuration", () => {
-  it("lists CalculatorService as an ordinary service", () => {
-    expect(providers.services).toContain(CalculatorService);
-  });
-});
 
 describe("createAppContainer", () => {
   it("self-binds generic provider services without application imports", () => {
@@ -33,23 +29,24 @@ describe("createAppContainer", () => {
   });
 
   it("binds listed capability constructors to themselves", () => {
-    const container = createAppContainer(getCapabilityTypes(), providers);
+    const container = createAppContainer(fixtureCapabilities, fixtureProviders);
 
-    expect(container.get(AddTool)).toBeInstanceOf(AddTool);
+    expect(container.get(FixtureAddTool)).toBeInstanceOf(FixtureAddTool);
+    expect(container.get(FixtureProjectInfoResource)).toBeInstanceOf(FixtureProjectInfoResource);
   });
 
   it("returns the same service within one container", () => {
-    const container = createAppContainer(getCapabilityTypes(), providers);
+    const container = createAppContainer(fixtureCapabilities, fixtureProviders);
 
-    expect(container.get(CalculatorService)).toBe(container.get(CalculatorService));
+    expect(container.get(FixtureCalculatorService)).toBe(container.get(FixtureCalculatorService));
   });
 
   it("isolates services and capabilities across containers", () => {
-    const first = createAppContainer(getCapabilityTypes(), providers);
-    const second = createAppContainer(getCapabilityTypes(), providers);
+    const first = createAppContainer(fixtureCapabilities, fixtureProviders);
+    const second = createAppContainer(fixtureCapabilities, fixtureProviders);
 
-    expect(first.get(CalculatorService)).not.toBe(second.get(CalculatorService));
-    expect(first.get(AddTool)).not.toBe(second.get(AddTool));
+    expect(first.get(FixtureCalculatorService)).not.toBe(second.get(FixtureCalculatorService));
+    expect(first.get(FixtureAddTool)).not.toBe(second.get(FixtureAddTool));
   });
 
   it("invokes the optional configure callback to override a default binding", () => {

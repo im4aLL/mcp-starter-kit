@@ -1,6 +1,7 @@
 import type { Newable } from "inversify";
 
 import type { IMcpPromptHandler, IMcpResourceHandler, IMcpToolHandler } from "./handler.types";
+import type { IResourceMetadata } from "./resource.types";
 import type { IToolMetadata } from "./tool.types";
 
 /**
@@ -24,10 +25,19 @@ export interface IResolvedTool {
 }
 
 /**
+ * A resource constructor paired with its decorator metadata.
+ */
+export interface IResolvedResource {
+  readonly metadata: IResourceMetadata;
+  readonly instance: IMcpResourceHandler;
+}
+
+/**
  * Runtime capability shape consumed by server registration.
  *
- * Prompts and resources are deferred, so only resolved tools are produced.
+ * Prompts are deferred, so only resolved tools and resources are produced.
  */
 export interface IResolvedCapabilities {
   readonly tools: readonly IResolvedTool[];
+  readonly resources: readonly IResolvedResource[];
 }

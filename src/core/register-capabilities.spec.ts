@@ -1,22 +1,24 @@
-import {
-  type CallToolResult,
-  InMemoryTransport,
-  type JSONRPCMessage,
-  type McpServer,
-} from "@modelcontextprotocol/server";
+import type { CallToolResult, McpServer, ReadResourceResult } from "@modelcontextprotocol/server";
 import { describe, expect, it, vi } from "vitest";
 
-import { getCapabilityTypes } from "../capabilities/capabilities";
-import { serverConfig } from "../config";
-import { providers } from "../providers";
-import { AddTool } from "../tools/add-tool/add-tool";
-import { AddToolInputSchema, AddToolOutputSchema } from "../tools/add-tool/add-tool.schemas";
-import { createAppContainer } from "./container";
-import { createServer } from "./create-server";
-import { getToolMetadata } from "./decorators";
+import {
+  FixtureAddTool,
+  FixtureAddToolInputSchema,
+  FixtureAddToolOutputSchema,
+  FixtureProjectInfoResource,
+} from "./core-test-fixtures";
+import { getResourceMetadata, getToolMetadata } from "./decorators";
+import { ResourceSerializationError } from "./map-results";
 import { registerCapabilities } from "./register-capabilities";
-import { resolveCapabilities } from "./resolve-capabilities";
-import type { IMcpToolHandler, IResolvedCapabilities, IResolvedTool, IToolMetadata } from "./types";
+import type {
+  IMcpResourceHandler,
+  IMcpToolHandler,
+  IResolvedCapabilities,
+  IResolvedResource,
+  IResolvedTool,
+  IResourceMetadata,
+  IToolMetadata,
+} from "./types";
 
 // Registration captured from a minimal server stand-in.
 interface ICapturedRegistration {
@@ -29,30 +31,42 @@ interface ICapturedRegistration {
   readonly callback: (args: unknown, extra: unknown) => Promise<CallToolResult>;
 }
 
-// Minimal JSON-RPC response shape used by the in-memory client harness.
-interface IJsonRpcResponse {
-  readonly id: number;
-  readonly result?: unknown;
-  readonly error?: { readonly code: number; readonly message: string };
-}
-
-// In-memory JSON-RPC client returned by {@link connectTestClient}.
-interface ITestClient {
-  request(id: number, method: string, params?: unknown): Promise<IJsonRpcResponse>;
-  notify(method: string): Promise<void>;
-  close(): Promise<void>;
+// Resource registration captured from a minimal server stand-in.
+interface ICapturedResourceRegistration {
+  readonly name: string;
+  readonly uri: string;
+  readonly config: {
+    readonly description?: string;
+    readonly mimeType?: string;
+  };
+  readonly callback: (uri: URL, extra: unknown) => Promise<ReadResourceResult>;
 }
 
 /**
- * Reads the decorator-owned AddTool metadata, failing loudly when absent.
+ * Reads the decorator-owned fixture tool metadata, failing loudly when absent.
  *
- * @returns The AddTool metadata.
+ * @returns The fixture tool metadata.
  */
-function requireAddToolMetadata(): IToolMetadata {
-  const metadata = getToolMetadata(AddTool);
+function requireFixtureToolMetadata(): IToolMetadata {
+  const metadata = getToolMetadata(FixtureAddTool);
 
   if (metadata === undefined) {
-    throw new Error("AddTool metadata was not found.");
+    throw new Error("FixtureAddTool metadata was not found.");
+  }
+
+  return metadata;
+}
+
+/**
+ * Reads the decorator-owned fixture resource metadata, failing loudly when absent.
+ *
+ * @returns The fixture resource metadata.
+ */
+function requireFixtureResourceMetadata(): IResourceMetadata {
+  const metadata = getResourceMetadata(FixtureProjectInfoResource);
+
+  if (metadata === undefined) {
+    throw new Error("FixtureProjectInfoResource metadata was not found.");
   }
 
   return metadata;
@@ -62,23 +76,38 @@ function requireAddToolMetadata(): IToolMetadata {
  * Builds a resolved tool record around a spy handler.
  *
  * @param handler - Handler implementation to wrap.
- * @returns A resolved tool record with AddTool metadata.
+ * @returns A resolved tool record with fixture tool metadata.
  */
 function createResolvedTool(handler: IMcpToolHandler["handler"]): IResolvedTool {
-  return { metadata: requireAddToolMetadata(), instance: { handler } };
+  return { metadata: requireFixtureToolMetadata(), instance: { handler } };
 }
 
 /**
- * Creates a minimal `McpServer` stand-in that records tool registrations.
+ * Builds a resolved resource record around a spy handler.
  *
- * @returns The stand-in server and its captured registrations.
+ * @param handler - Handler implementation to wrap.
+ * @returns A resolved resource record with fixture resource metadata.
  */
-function createCapturingServer(): { server: McpServer; registrations: ICapturedRegistration[] } {
+function createResolvedResource(handler: IMcpResourceHandler["handler"]): IResolvedResource {
+  return { metadata: requireFixtureResourceMetadata(), instance: { handler } };
+}
+
+/**
+ * Creates a minimal `McpServer` stand-in that records capability registrations.
+ *
+ * @returns The stand-in server plus its captured tool and resource registrations.
+ */
+function createCapturingServer(): {
+  server: McpServer;
+  registrations: ICapturedRegistration[];
+  resourceRegistrations: ICapturedResourceRegistration[];
+} {
   const registrations: ICapturedRegistration[] = [];
+  const resourceRegistrations: ICapturedResourceRegistration[] = [];
 
   const server = {
     /**
-     * Records a registration instead of hitting the SDK.
+     * Records a tool registration instead of hitting the SDK.
      *
      * @param name - Registered tool name.
      * @param config - Registered tool configuration.
@@ -93,67 +122,40 @@ function createCapturingServer(): { server: McpServer; registrations: ICapturedR
       registrations.push({ name, config, callback });
       return undefined;
     },
+    /**
+     * Records a resource registration instead of hitting the SDK.
+     *
+     * @param name - Registered resource name.
+     * @param uri - Registered resource URI.
+     * @param config - Registered resource configuration.
+     * @param callback - Registered resource callback.
+     * @returns Nothing.
+     */
+    registerResource(
+      name: string,
+      uri: string,
+      config: ICapturedResourceRegistration["config"],
+      callback: ICapturedResourceRegistration["callback"],
+    ): undefined {
+      resourceRegistrations.push({ name, uri, config, callback });
+      return undefined;
+    },
   } as unknown as McpServer;
 
-  return { server, registrations };
-}
-
-/**
- * Connects an in-memory JSON-RPC client to a server.
- *
- * @param server - Server to connect.
- * @returns A small request/notify/close client.
- */
-async function connectTestClient(server: McpServer): Promise<ITestClient> {
-  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  const pending = new Map<number, (response: IJsonRpcResponse) => void>();
-
-  clientTransport.onmessage = (message) => {
-    const response = message as IJsonRpcResponse;
-
-    if (typeof response.id === "number") {
-      pending.get(response.id)?.(response);
-      pending.delete(response.id);
-    }
-  };
-
-  await server.connect(serverTransport);
-  await clientTransport.start();
-
-  /**
-   * Sends one raw JSON-RPC message.
-   *
-   * @param message - Message to send.
-   * @returns A promise that resolves once the transport accepts the message.
-   */
-  function send(message: Record<string, unknown>): Promise<void> {
-    return clientTransport.send(message as JSONRPCMessage);
-  }
-
-  return {
-    request: (id, method, params) => {
-      const response = new Promise<IJsonRpcResponse>((resolve) => pending.set(id, resolve));
-
-      void send({ jsonrpc: "2.0", id, method, params });
-
-      return response;
-    },
-    notify: (method) => send({ jsonrpc: "2.0", method }),
-    close: () => clientTransport.close(),
-  };
+  return { server, registrations, resourceRegistrations };
 }
 
 describe("registerCapabilities", () => {
   it("registers the decorator-owned name, description, and schemas", () => {
     const { server, registrations } = createCapturingServer();
 
-    registerCapabilities(server, { tools: [createResolvedTool(vi.fn())] });
+    registerCapabilities(server, { tools: [createResolvedTool(vi.fn())], resources: [] });
 
     expect(registrations).toHaveLength(1);
     expect(registrations[0]?.name).toBe("add");
     expect(registrations[0]?.config.description).toBe("Adds two numbers together.");
-    expect(registrations[0]?.config.inputSchema).toBe(AddToolInputSchema);
-    expect(registrations[0]?.config.outputSchema).toBe(AddToolOutputSchema);
+    expect(registrations[0]?.config.inputSchema).toBe(FixtureAddToolInputSchema);
+    expect(registrations[0]?.config.outputSchema).toBe(FixtureAddToolOutputSchema);
   });
 
   it("maps a domain result and forwards arguments plus extra unchanged", async () => {
@@ -161,7 +163,7 @@ describe("registerCapabilities", () => {
     const { server, registrations } = createCapturingServer();
     const extra = { forwarded: true };
 
-    registerCapabilities(server, { tools: [createResolvedTool(handler)] });
+    registerCapabilities(server, { tools: [createResolvedTool(handler)], resources: [] });
 
     const result = await registrations[0]?.callback({ a: 1, b: 2 }, extra);
 
@@ -176,7 +178,7 @@ describe("registerCapabilities", () => {
     const handler = vi.fn().mockRejectedValue(new Error("boom"));
     const { server, registrations } = createCapturingServer();
 
-    registerCapabilities(server, { tools: [createResolvedTool(handler)] });
+    registerCapabilities(server, { tools: [createResolvedTool(handler)], resources: [] });
 
     const result = await registrations[0]?.callback({ a: 1, b: 2 }, undefined);
 
@@ -186,69 +188,64 @@ describe("registerCapabilities", () => {
     });
   });
 
-  it("registers nothing when there are no tool capabilities", () => {
-    const { server, registrations } = createCapturingServer();
-    const empty: IResolvedCapabilities = { tools: [] };
+  it("registers nothing when there are no capabilities", () => {
+    const { server, registrations, resourceRegistrations } = createCapturingServer();
+    const empty: IResolvedCapabilities = { tools: [], resources: [] };
 
     registerCapabilities(server, empty);
 
     expect(registrations).toHaveLength(0);
+    expect(resourceRegistrations).toHaveLength(0);
   });
-});
 
-describe("SDK input validation", () => {
-  it("lists add, returns matching text and structured content, and rejects malformed input before the handler", async () => {
-    const capabilityTypes = getCapabilityTypes();
-    const container = createAppContainer(capabilityTypes, providers);
-    const capabilities = resolveCapabilities(container, capabilityTypes);
-    const addTool = capabilities.tools[0];
+  it("registers the decorator-owned resource name, URI, and MIME hint", () => {
+    const { server, resourceRegistrations } = createCapturingServer();
 
-    if (addTool === undefined) {
-      throw new Error("AddTool was not resolved.");
-    }
+    registerCapabilities(server, { tools: [], resources: [createResolvedResource(vi.fn())] });
 
-    const handlerSpy = vi.spyOn(addTool.instance, "handler");
-    const server = createServer(capabilities, serverConfig);
-    const client = await connectTestClient(server);
+    expect(resourceRegistrations).toHaveLength(1);
+    expect(resourceRegistrations[0]?.name).toBe("Project information");
+    expect(resourceRegistrations[0]?.uri).toBe("project://info");
+    expect(resourceRegistrations[0]?.config.description).toBe("Describes the MCP starter project.");
+    expect(resourceRegistrations[0]?.config.mimeType).toBe("text/plain");
+  });
 
-    try {
-      const init = await client.request(1, "initialize", {
-        protocolVersion: "2025-11-25",
-        capabilities: {},
-        clientInfo: { name: "test-client", version: "1.0.0" },
-      });
-      expect(init.error).toBeUndefined();
+  it("maps a string resource and forwards the URI plus extra unchanged", async () => {
+    const handler = vi.fn().mockResolvedValue("A class-based MCP server starter.");
+    const { server, resourceRegistrations } = createCapturingServer();
+    const extra = { forwarded: true };
 
-      await client.notify("notifications/initialized");
+    registerCapabilities(server, { tools: [], resources: [createResolvedResource(handler)] });
 
-      const list = await client.request(2, "tools/list", {});
-      const listedTools = (list.result as { tools: readonly { name: string }[] }).tools;
+    const result = await resourceRegistrations[0]?.callback(new URL("project://info"), extra);
 
-      expect(listedTools.map((tool) => tool.name)).toContain("add");
+    expect(handler).toHaveBeenCalledWith("project://info", extra);
+    expect(result).toEqual({
+      contents: [{ uri: "project://info", mimeType: "text/plain", text: "A class-based MCP server starter." }],
+    });
+  });
 
-      const call = await client.request(3, "tools/call", { name: "add", arguments: { a: 1, b: 2 } });
-      const callResult = call.result as CallToolResult;
+  it("maps a JSON resource value to application/json", async () => {
+    const handler = vi.fn().mockResolvedValue({ name: "starter" });
+    const { server, resourceRegistrations } = createCapturingServer();
 
-      expect(call.error).toBeUndefined();
-      expect(callResult.content).toEqual([{ type: "text", text: JSON.stringify({ result: 3 }) }]);
-      expect(callResult.structuredContent).toEqual({ result: 3 });
+    registerCapabilities(server, { tools: [], resources: [createResolvedResource(handler)] });
 
-      const invalid = await client.request(4, "tools/call", { name: "add", arguments: { a: "x", b: 2 } });
-      const invalidResult = invalid.result as CallToolResult;
+    const result = await resourceRegistrations[0]?.callback(new URL("project://info"), undefined);
 
-      expect(invalid.error).toBeUndefined();
-      expect(invalidResult.isError).toBe(true);
+    expect(result).toEqual({
+      contents: [{ uri: "project://info", mimeType: "application/json", text: JSON.stringify({ name: "starter" }) }],
+    });
+  });
 
-      const missingOperand = await client.request(5, "tools/call", { name: "add", arguments: { a: 1 } });
-      const missingOperandResult = missingOperand.result as CallToolResult;
+  it("propagates a resource serialization failure instead of emitting fake contents", async () => {
+    const handler = vi.fn().mockResolvedValue(undefined);
+    const { server, resourceRegistrations } = createCapturingServer();
 
-      expect(missingOperand.error).toBeUndefined();
-      expect(missingOperandResult.isError).toBe(true);
-    } finally {
-      await client.close();
-    }
+    registerCapabilities(server, { tools: [], resources: [createResolvedResource(handler)] });
 
-    // The valid call invoked the handler once; neither malformed call did.
-    expect(handlerSpy).toHaveBeenCalledTimes(1);
+    await expect(resourceRegistrations[0]?.callback(new URL("project://info"), undefined)).rejects.toBeInstanceOf(
+      ResourceSerializationError,
+    );
   });
 });

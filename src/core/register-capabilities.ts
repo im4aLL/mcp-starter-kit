@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/server";
 
-import { mapToolError, mapToolResult } from "./map-results";
-import type { IResolvedCapabilities, IResolvedTool } from "./types";
+import { mapResourceResult, mapToolError, mapToolResult } from "./map-results";
+import type { IResolvedCapabilities, IResolvedResource, IResolvedTool } from "./types";
 
 /**
  * Registers one resolved tool with the SDK.
@@ -36,6 +36,36 @@ function registerTool(server: McpServer, resolved: IResolvedTool): void {
 }
 
 /**
+ * Registers one resolved resource with the SDK.
+ *
+ * The decorator-owned URI and listing MIME hint are passed to the SDK. The
+ * wrapper forwards the URI as a string and the request-extra argument
+ * unchanged, calls the resolved handler without parsing, and maps the domain
+ * value to contents. Serialization errors are not caught here so the SDK
+ * returns a protocol failure.
+ *
+ * @param server - Server receiving the resource registration.
+ * @param resolved - Resolved resource metadata and instance.
+ */
+function registerResource(server: McpServer, resolved: IResolvedResource): void {
+  const { metadata, instance } = resolved;
+
+  server.registerResource(
+    metadata.name,
+    metadata.uri,
+    {
+      description: metadata.description,
+      mimeType: metadata.mimeType,
+    },
+    async (uri, extra) => {
+      const value = await instance.handler(uri.href, extra);
+
+      return mapResourceResult(uri.href, value);
+    },
+  );
+}
+
+/**
  * Registers resolved runtime capabilities with a server.
  *
  * @param server - Server receiving the registrations.
@@ -44,5 +74,9 @@ function registerTool(server: McpServer, resolved: IResolvedTool): void {
 export function registerCapabilities(server: McpServer, capabilities: IResolvedCapabilities): void {
   for (const tool of capabilities.tools) {
     registerTool(server, tool);
+  }
+
+  for (const resource of capabilities.resources) {
+    registerResource(server, resource);
   }
 }

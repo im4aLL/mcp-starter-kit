@@ -33,8 +33,9 @@ export interface IMcpToolHandler {
 /**
  * Erased runtime contract every resource class implements.
  *
- * Resources are deferred; the contract exists so capability lists stay
- * uniformly typed.
+ * The URI is a string and the method uses method syntax so specifically typed
+ * class handlers remain assignable. The typed `@resource` decorator owns the
+ * resource contract check.
  */
 export interface IMcpResourceHandler {
   handler(uri: string, extra?: McpRequestExtraType): ResourceHandlerResultType | Promise<ResourceHandlerResultType>;
