@@ -16,7 +16,7 @@ Capability authors can use the simple domain-return path or return supported SDK
 - [ ] Add narrow structural guards for `CallToolResult`, resource `{ contents }`, and prompt `{ messages }`. Keep the documented limitation that a structured tool output containing a content-block array is interpreted as wire format.
 - [ ] Make `mapToolResult` return SDK wire results unchanged and otherwise return one JSON text content block plus the original structured output.
 - [ ] Make `mapResourceResult` return SDK contents unchanged before applying the string and JSON-value domain serialization paths.
-- [ ] Make prompt mapping return SDK messages unchanged and otherwise wrap a string into one text message using the configured default role.
+- [ ] Make prompt mapping return SDK messages unchanged and otherwise wrap a string into one text message using the default role from resolved decorator metadata.
 - [ ] Preserve extra wire fields by returning the original object, not a reconstructed subset.
 - [ ] Keep thrown tool handling separate from wire pass-through: map thrown values to `isError: true` text content and log through Pino without leaking stack details to clients.
 - [ ] Complete behavior-focused mapper specs for domain and wire paths, identity preservation, tool failure, prompt default and assistant roles, mixed prompt messages, mixed tool content, binary resource contents, all resource JSON primitives/containers, and all documented serialization failures.
@@ -33,7 +33,7 @@ Capability authors can use the simple domain-return path or return supported SDK
 ## Verification
 
 - [ ] Run focused mapper specs, then the full lint, test, and build commands.
-- [ ] Add test-only capability fixtures and invoke each domain and wire path through the actual registration callbacks or a real SDK client.
+- [ ] Add decorated test-only capability fixtures, resolve them through a test container, and invoke each domain and wire path through the actual registration callbacks or a real SDK client.
 - [ ] Verify object identity for pass-through results and exact text/MIME values for mapped domain results.
 - [ ] Verify error logs use `{ err }` on stderr while client-visible tool error text remains safe.
 

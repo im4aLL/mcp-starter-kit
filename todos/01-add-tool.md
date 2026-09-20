@@ -2,42 +2,119 @@
 
 Status: [ ] Not started
 
-Source: `PLAN.md` sections "Core contract", "Schema ownership", "Heterogeneous capability collections", "Server factory (stdio and later HTTP)", and "Samples (easy to delete when copying)".
+Source: `PLAN.md` sections "Core contract", "Dependency injection and lifetimes", "Schema ownership", "Decorated capability constructors and resolved collections", "Server factory (stdio and later HTTP)", and "Samples (easy to delete when copying)".
 
 Depends on: [00 Project bootstrap and stdio handshake](00-project-bootstrap.md).
 
 ## Outcome
 
-A client can list `add`, call it with `{ "a": 1, "b": 2 }`, and receive text `{"result":3}` plus structured output `{ "result": 3 }`. Invalid input is rejected by the SDK before the class handler runs.
+A client can list `add`, call it with `{ "a": 1, "b": 2 }`, and receive text `{"result":3}` plus structured output `{ "result": 3 }`. Invalid input is rejected by the SDK before the class handler runs. The first vertical slice also proves the intended authoring flow: typed capability metadata, explicit constructor registration, constructor injection, one container per server, and resolved runtime registration.
+
+## Target shape
+
+`AddTool` keeps the simple non-generic implements clause. `AddToolInput` and `AddToolOutput` are derived from the schemas, the method annotations enforce the local contract, and the typed `@tool` decorator verifies that the method is compatible with the schemas in its metadata.
+
+```ts
+/**
+ * Adds two numbers through the calculator service.
+ */
+@tool({
+  name: "add",
+  description: "Adds two numbers together.",
+  inputSchema: AddToolInputSchema,
+  outputSchema: AddToolOutputSchema,
+})
+export class AddTool implements McpToolHandler {
+  /**
+   * Creates an add tool.
+   *
+   * @param calculator - Calculator used by the tool.
+   */
+  public constructor(
+    @inject(CalculatorService)
+    private readonly calculator: CalculatorService,
+  ) {}
+
+  /**
+   * Adds the supplied numbers.
+   *
+   * @param input - Validated tool input.
+   * @returns The structured addition result.
+   */
+  public handler(input: AddToolInput): AddToolOutput {
+    return {
+      result: this.calculator.add(input.a, input.b),
+    };
+  }
+}
+```
+
+The explicit composition list contains constructors, not instances:
+
+```ts
+/**
+ * Returns the capability constructors registered by the application.
+ *
+ * @returns Explicit tool, prompt, and resource constructor lists.
+ */
+export function getCapabilityTypes(): CapabilityTypes {
+  return {
+    tools: [AddTool],
+    prompts: [],
+    resources: [],
+  };
+}
+```
+
+The application-owned provider configuration lists ordinary service constructors. The generic application container self-binds them with singleton scope by default, so adding a normal service does not require editing `src/core/container.ts`. Scope still belongs to composition, so `AddTool` does not change if a developer later replaces the ordinary provider entry with a custom transient binding.
+
+```ts
+export const providers = {
+  services: [CalculatorService],
+} satisfies ProviderConfiguration;
+
+const container = createAppContainer(capabilityTypes, providers);
+```
 
 ## Implementation
 
-- [ ] Add `src/tools/add-tool/add-tool.schemas.ts` with transform-free Zod 4 object schemas for numeric `a` and `b` input and numeric `result` output.
-- [ ] Add schema-derived types in `add-tool.types.ts` and a specifically typed `AddTool` class in `add-tool.ts`. Keep the handler pure and omit the optional request-extra argument in this sample.
-- [ ] Introduce the tool-specific and erased tool contracts in `src/core/types.ts`, parameterized by schema objects and `z.output`. Include the optional verified SDK request-extra alias in handler signatures and use method syntax on erased handlers.
-- [ ] Introduce the minimum `Capabilities` shape needed by the planned composition boundary without adding speculative registries or base classes.
-- [ ] Add `src/capabilities/capabilities.ts` with `getCapabilities()` returning a fresh `AddTool` instance on every call and empty resource and prompt arrays.
+- [ ] Add `src/tools/add-tool/add-tool.schemas.ts` with transform-free Zod 4 object schemas for numeric `a` and `b` input and object output `{ result: number }`.
+- [ ] Add schema-derived `AddToolInput` and `AddToolOutput` types in `add-tool.types.ts`.
+- [ ] Add an injectable `CalculatorService` in `src/services/calculator-service.ts` with a deterministic `add(a, b)` method. Use the concrete class as its service identifier because the starter has one implementation and no abstraction boundary to justify an interface token.
+- [ ] Introduce non-generic `McpToolHandler`, tool metadata, Inversify `Newable`-based constructor-list, resolved-tool, `CapabilityTypes`, and runtime `Capabilities` contracts in `src/core/types.ts`. Use method syntax with an erased `unknown` input on the runtime handler interface so resolved registration can invoke it, while the typed decorator retains schema-specific checking. Keep metadata on constructors and resolved records, not as fields added to capability instances.
+- [ ] Add a typed `@tool` decorator and direct metadata reader in `src/core/decorators.ts`. Before applying Inversify's bare `injectable()` metadata, check the shared capability metadata store and reject a constructor already marked by another capability decorator. Do not select a scope. Store immutable tool metadata without replacing the constructor, mutating the prototype, binding or registering globally, scanning modules, or inheriting metadata implicitly. Constrain the decorator target so its handler accepts `z.output<TInputSchema>` and returns the allowed result for `z.output<TOutputSchema>`.
+- [ ] Add `AddTool` in the target shape above with only `@tool(...)`, `implements McpToolHandler`, explicit schema-derived method annotations, and constructor injection via `@inject(CalculatorService)`. Do not repeat `@injectable()` on a capability class. Omit the optional request-extra argument in this sample.
+- [ ] Add `src/capabilities/capabilities.ts` with `getCapabilityTypes()` returning `[AddTool]` and empty prompt and resource constructor arrays. This is the only capability registration list; do not add decorator-driven discovery.
+- [ ] Add `ProviderConfiguration` and `createAppContainer(capabilityTypes, providers)` in `src/core/container.ts`. Create `new Container({ defaultScope: "Singleton" })`, explicitly self-bind every constructor in `providers.services`, invoke the optional custom binding callback, and explicitly bind every listed capability constructor to itself. Keep this file generic and free of application service imports. Do not rely on autobinding.
+- [ ] Add `src/providers.ts` with a `providers` configuration whose `services` list contains `CalculatorService`. This is the application-owned service composition point developers update for ordinary concrete services; do not add an `others` category without distinct binding behavior.
+- [ ] Add `src/core/resolve-capabilities.ts` to read metadata, resolve each listed constructor from the supplied container, and produce runtime `Capabilities` records for registration. Fail before registration when a listed constructor lacks `@tool` or has the wrong capability decorator.
 - [ ] Add `src/core/map-results.ts` support for domain tool output: JSON serialize it into one text content block and include the same object as `structuredContent`. Add safe tool error mapping and boundary logging for thrown handlers.
-- [ ] Add `src/core/register-capabilities.ts` to register tool metadata and schemas with the SDK and call `handler(args, extra)` without parsing either input or output in core.
-- [ ] Update `createServer` to accept capabilities and update `main.ts` so `getCapabilities()` runs inside `createAppServer`.
-- [ ] Add focused schema, handler, mapper, and registration tests, including proof that malformed input does not invoke the handler.
+- [ ] Add `src/core/register-capabilities.ts` to register resolved tool metadata and schemas with the SDK and call the resolved instance's `handler(args, extra)` without parsing input or output in core.
+- [ ] Update `createServer` to accept resolved runtime capabilities. Update `main.ts` so each `createAppServer()` call gets the constructor list, passes the imported provider configuration to a new application container, resolves the capabilities, and passes them to `createServer`.
+- [ ] Add focused schema, handler, decorator metadata, provider configuration, container, resolver, mapper, and registration tests. Include proof that `@tool` alone makes a constructor-injected capability resolvable, listed providers are self-bound without application imports in core, malformed input does not invoke the handler, the default binding returns the same `CalculatorService` within one container, and separate server factories do not share the service or tool instance.
+- [ ] Add compile-time tests proving a mismatched tool output type is rejected by the typed decorator while `class AddTool implements McpToolHandler` remains non-generic. Cover the complete constructor-list, resolution, erased-handler invocation, and registration path without a cast for `AddTool`.
 - [ ] Add TSDoc above every introduced function, class, and class method.
 
 ## Acceptance criteria
 
-- [ ] MCP discovery exposes one tool named `add` with the expected description and schemas.
+- [ ] MCP discovery exposes one tool named `add` with the expected decorator-owned description and schemas.
 - [ ] A valid call returns matching JSON text and structured content.
 - [ ] The SDK rejects missing or nonnumeric inputs before `AddTool.handler` executes.
 - [ ] A thrown tool error becomes an MCP tool error result and is logged through the Pino `err` key without writing to stdout.
-- [ ] `getCapabilities()` creates a new `AddTool` for each server factory call.
+- [ ] `getCapabilityTypes()` contains `AddTool`, not `new AddTool()`, and there is no hidden capability registry or source scan.
+- [ ] `AddTool` receives `CalculatorService` through constructor injection, uses no explicit `@injectable()` decorator, and never accesses the container.
+- [ ] `CalculatorService` is declared in `src/providers.ts`, generic container code binds it without importing it, normal bindings are singleton within one application container, and separate `createAppServer()` calls produce isolated containers, services, and capability instances.
+- [ ] After the generic core path exists, adding or replacing an application capability or ordinary service requires no edits under `src/core/`; core changes are reserved for intentional framework behavior changes.
+- [ ] The typed decorator rejects a handler result that does not match `AddToolOutputSchema`; for the object schema, returning a bare number does not compile.
 
 ## Verification
 
 - [ ] Run lint, tests, and build.
 - [ ] Use Inspector or a real SDK client to list `add`, call it with valid values, and inspect both content representations.
 - [ ] Call `add` with invalid input and verify the protocol reports schema failure while a focused spy confirms no handler call.
-- [ ] Start two application servers and verify their tool instances are not referentially equal.
+- [ ] Resolve listed `CalculatorService` and `AddTool` bindings repeatedly from one container and verify singleton behavior, then create two application servers and verify their containers, services, and tools are not referentially equal.
+- [ ] Run the negative type fixture and confirm an incompatible schema-derived handler result fails compilation for the expected reason.
 
 ## Deliberately deferred
 
-Resources, prompts, nontrivial JSON resource serialization, mixed SDK wire results, the second type-only tool, full request-extra forwarding proof, shutdown signals, and final documentation.
+Resources, prompts, nontrivial JSON resource serialization, mixed SDK wire results, complete duplicate-identifier validation, full request-extra forwarding proof, explicit transient overrides, per-invocation factory providers, shutdown signals, and final documentation.

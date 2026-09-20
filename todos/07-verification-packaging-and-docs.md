@@ -12,15 +12,15 @@ A developer can clone or copy the starter, install it cleanly, run all checks, b
 
 ## Implementation
 
-- [ ] Review co-located specs and close behavior gaps for sample handlers and schemas, domain and wire result mapping, resource serialization, registration, schema ownership, extra forwarding, capability freshness, transport errors, and shutdown. Extend existing tests rather than duplicating fixtures.
+- [ ] Review co-located specs and close behavior gaps for sample handlers and schemas, decorator metadata and type safety, constructor-list composition, dependency injection and scope behavior, domain and wire result mapping, resource serialization, registration, schema ownership, extra forwarding, per-server isolation, transport errors, and shutdown. Extend existing tests rather than duplicating fixtures.
 - [ ] Verify `tsconfig.json` covers application plus specs and Vitest, while `tsconfig.build.json` emits only runnable source beneath `dist` with correct NodeNext imports and source layout.
 - [ ] Verify the package `bin` points to `dist/main.js`, the emitted entry retains a shebang, and `npm run start` plus local package-bin execution work from outside the repository working directory.
 - [ ] Run a clean install from the committed lockfile and execute lint, test, build, and start checks on Node 20 or the newer supported baseline selected in task 00.
 - [ ] Run `npm pack --dry-run` and inspect the file list. Exclude tests, local logs, secrets, editor state, and unintended artifacts while retaining required runtime files.
 - [ ] Perform the documented Inspector smoke test against `node dist/main.js`: call `add`, read `project://info`, and retrieve `code_review`.
 - [ ] Perform a local Cursor stdio smoke check with the absolute built path when Cursor is available. Record any unverified manual step honestly rather than claiming it passed.
-- [ ] Write a short root `README.md` covering prerequisites, copy and rename points, install/build/start commands, the capability folder pattern, Cursor configuration, and the Inspector command.
-- [ ] Explicitly tell copiers to rename package `name`, `bin`, Pino logger name where desired, and the `McpServer` name. Keep the README focused and do not turn it into framework documentation.
+- [ ] Write a short root `README.md` covering prerequisites, copy and rename points, install/build/start commands, the single-decorator capability pattern, explicit constructor registration through `getCapabilityTypes()`, ordinary singleton service registration through `src/providers.ts`, custom provider bindings for non-default lifetimes, the rule that routine application extension does not modify `src/core/`, Cursor configuration, and the Inspector command.
+- [ ] Explicitly tell copiers to rename package `name`, `bin`, Pino logger name where desired, and the `McpServer` name. Briefly document that capability decorators already apply injectable metadata, while non-capability services use `@injectable()` directly. Also document concrete-class constructor injection, default singleton scope, explicit transient override in `src/providers.ts`, and the injected `toFactory` pattern in `src/providers.ts` for per-handler fresh dependencies. Explain that direct transient injection is new per consumer resolution, not automatically per handler call, and that none of these application bindings require editing `src/core/container.ts`. Keep the README focused and do not turn it into broad framework documentation.
 - [ ] Recheck every TSDoc requirement and repository style rule, including comments, blank lines in function bodies, and absence of non-Biome formatters or linters.
 
 ## Acceptance criteria
@@ -28,9 +28,9 @@ A developer can clone or copy the starter, install it cleanly, run all checks, b
 - [ ] A clean install followed by lint, test, and build passes without ignored or flaky failures.
 - [ ] `dist` has no spec files and `node dist/main.js` works independently of tsx or source imports.
 - [ ] The package bin runs after build and the dry-run tarball contains only intentional starter files.
-- [ ] Inspector verifies all three samples with the exact names, URI, roles, MIME types, and result shapes from `PLAN.md`.
+- [ ] Inspector verifies all three samples with the exact decorator-owned names, URI, roles, MIME types, and result shapes from `PLAN.md`.
 - [ ] Stdout remains protocol-only through startup, successful calls, rejected input, handler failure, and shutdown.
-- [ ] The README is short, accurate, and distinguishes current stdio support from deferred HTTP and authentication work.
+- [ ] The README is short, accurate, explains explicit decorated constructor composition, identifies `src/providers.ts` as the application service composition point for singleton, transient, and factory bindings, makes clear that `src/core/` changes are only for framework behavior, distinguishes transient consumer resolution from per-handler factory creation, and distinguishes current stdio support from deferred HTTP and authentication work.
 
 ## Verification
 
