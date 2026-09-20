@@ -43,4 +43,4 @@ A developer can clone or copy the starter, install it cleanly, run all checks, b
 
 ## Deliberately deferred
 
-HTTP and OAuth, npm publication, a generator or template CLI, extra runtime capabilities, automated IDE UI tests, pretty logs, mixed-content samples, progress/cancellation examples, binary resource domain mapping, and every other item listed under `PLAN.md` "Out of scope".
+Capability scaffolding and console listing remain deferred to tasks 08 and 09. HTTP and OAuth, npm publication, a standalone generator package or template CLI, extra runtime capabilities, automated IDE UI tests, pretty logs, mixed-content samples, progress/cancellation examples, binary resource domain mapping, and every other item listed under `PLAN.md` "Out of scope".

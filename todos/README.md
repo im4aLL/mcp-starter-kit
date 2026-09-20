@@ -2,11 +2,11 @@
 
 ## Goal
 
-Deliver a copyable, class-based TypeScript MCP starter that runs over stdio, exposes one obvious tool, resource, and prompt, keeps domain handlers separate from MCP wire mapping, and is easy to verify and replace without becoming a reusable framework package.
+Deliver a copyable, class-based TypeScript MCP starter that runs over stdio, exposes one obvious tool, resource, and prompt, keeps domain handlers separate from MCP wire mapping, and is easy to verify and extend with small local developer scripts without becoming a reusable framework package.
 
 ## Authority and baseline
 
-[PLAN.md](../PLAN.md) is authoritative for the target layout, contracts, behavior, scope, and completion constraints. This backlog turns that plan into an observable-first implementation sequence. The inspected repository contains only `PLAN.md`, repository instructions, and logs. There is no package manifest, lockfile, source code, test configuration, or established command to preserve.
+[PLAN.md](../PLAN.md) is authoritative for the starter baseline, contracts, behavior, and completion constraints. This backlog turns that plan into an observable-first implementation sequence and adds the approved local developer-script follow-ups in tasks 08 and 09. The inspected repository contains only `PLAN.md`, repository instructions, and logs. There is no package manifest, lockfile, source code, test configuration, or established command to preserve.
 
 Follow `/Users/hadi/.agents/DEVELOPMENT_WORKFLOW.md`: make the smallest coherent execution path runnable first, verify it, add one capability at a time, and harden proven behavior afterward. Every task must leave the starter runnable and keep all checks introduced by earlier tasks passing.
 
@@ -15,7 +15,7 @@ Follow `/Users/hadi/.agents/DEVELOPMENT_WORKFLOW.md`: make the smallest coherent
 - npm is the intended package manager because the plan defines npm scripts, `npx`, package `bin`, and npm package metadata. Task 00 must verify and lock the actual dependency set.
 - The empty-server handshake in task 00 is intentionally temporary but coherent: it proves the executable, SDK, stdio, logging, and build boundaries before capability contracts are added.
 - Exact SDK v2 callback and result type names remain an implementation-time verification item. Use exported SDK types rather than copying or inventing equivalents.
-- The final package is private and locally copyable. Publishing, HTTP, OAuth, generators, and broad framework extensibility remain out of scope.
+- The final package is private and locally copyable. Publishing, HTTP, OAuth, standalone generator packages, and broad framework extensibility remain out of scope. Task 08 adds only a small repository-local scaffold script.
 
 ## Proposed structure
 
@@ -31,6 +31,7 @@ Create files only when their task needs them. The final mental map is:
 | `src/core/map-results.ts` | Domain result mapping, SDK wire-result pass-through, and resource serialization |
 | `src/core/transports/stdio.ts` | Stdio serving, boundary logging, signal handling, and shutdown |
 | `src/tools`, `src/resources`, `src/prompts` | Replaceable sample capability classes, schemas, types, and co-located specs |
+| `scripts/` | Repository-local Node scripts for capability scaffolding and metadata listing |
 | `src/utils/logger.ts` | Pino logger pinned to stderr |
 | `tsconfig*.json`, `biome.json`, package files | Development, build, formatting, lint, test, and executable package configuration |
 | `README.md` | Short copy, rename, capability, build, Cursor, and Inspector workflow |
@@ -49,10 +50,12 @@ Numeric order is the recommended implementation sequence and each task lists its
 | [05 Type, schema, and request-context contracts](05-type-schema-and-context-contracts.md) | [ ] Not started | 04 | Heterogeneous capabilities remain strongly typed and SDK context is forwarded unchanged |
 | [06 Stdio lifecycle and diagnostics](06-stdio-lifecycle-and-diagnostics.md) | [ ] Not started | 05 | Signals close the transport predictably and all diagnostics remain on stderr |
 | [07 Verification, packaging, and starter documentation](07-verification-packaging-and-docs.md) | [ ] Not started | 06 | Clean install, checks, build, bin execution, Cursor, and Inspector workflows are verified and documented |
+| [08 Capability scaffold generator](08-capability-generator.md) | [ ] Not started | 07 | A local Node script generates a safe starter scaffold for a tool, resource, or prompt |
+| [09 List registered capabilities in the console](09-list-capabilities-script.md) | [ ] Not started | 08 | A local Node script prints registered tools, resources, and prompts in a console table |
 
 ## Sequence rationale
 
-Task 00 establishes a real protocol process rather than configuration-only scaffolding. Tasks 01-03 complete one developer-visible MCP capability at a time. Task 04 expands the proven paths to the full result and serialization contract. Task 05 proves the TypeScript and SDK ownership seams. Task 06 hardens lifecycle behavior and logging after the execution flow exists. Task 07 performs clean-consumer verification and documents only behavior demonstrated by the completed starter.
+Task 00 establishes a real protocol process rather than configuration-only scaffolding. Tasks 01-03 complete one developer-visible MCP capability at a time. Task 04 expands the proven paths to the full result and serialization contract. Task 05 proves the TypeScript and SDK ownership seams. Task 06 hardens lifecycle behavior and logging after the execution flow exists. Task 07 performs clean-consumer verification and documents only behavior demonstrated by the completed starter. Tasks 08 and 09 then add narrow developer conveniences on top of stable capability conventions: scaffold generation first, followed by observable metadata listing.
 
 ## Global implementation rules
 
@@ -65,7 +68,7 @@ Task 00 establishes a real protocol process rather than configuration-only scaff
 - Give every function, class, and class method a standard TSDoc block. Types in `*.types.ts` and schemas in `*.schemas.ts` do not require TSDoc.
 - Keep `main.ts` thin, create capability instances inside the server factory, and keep transport lifecycle in `src/core/transports/stdio.ts`.
 - Keep specs co-located and exclude them from `dist`.
-- Do not add HTTP, OAuth, publishing automation, generators, pretty logging, extra samples, or speculative extension systems.
+- Do not add HTTP, OAuth, publishing automation, standalone generator packages, pretty logging, extra samples, or speculative extension systems. Keep task 08 as a narrow repository-local Node script.
 
 ## Completion criteria
 
@@ -76,4 +79,5 @@ Task 00 establishes a real protocol process rather than configuration-only scaff
 - [ ] Request extras are optional and forwarded unchanged, fresh factories produce fresh capability instances, and heterogeneous tool types compile together.
 - [ ] Signal handling closes the stdio handle and diagnostics never corrupt stdout.
 - [ ] `dist` contains no emitted specs and `npm pack --dry-run` contains no unintended source, test, secret, or local artifact.
-- [ ] The short README covers only the verified starter workflow and the required rename points.
+- [ ] The short README covers the verified starter workflow, required rename points, capability generation, and capability listing.
+- [ ] The local generator safely scaffolds each capability kind without overwriting files, and the listing script prints all registered capabilities without starting a transport.
