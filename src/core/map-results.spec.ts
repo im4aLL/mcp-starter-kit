@@ -1,11 +1,13 @@
-import type { CallToolResult, ReadResourceResult } from "@modelcontextprotocol/server";
+import type { CallToolResult, GetPromptResult, ReadResourceResult } from "@modelcontextprotocol/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { logger } from "../utils/logger";
 import {
   isCallToolResult,
+  isGetPromptResult,
   isJsonValue,
   isReadResourceResult,
+  mapPromptResult,
   mapResourceResult,
   mapToolError,
   mapToolResult,
@@ -83,6 +85,48 @@ describe("mapToolError", () => {
     mapToolError(new Error("stderr only"));
 
     expect(stdoutSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("isGetPromptResult", () => {
+  it("accepts a result with a messages array", () => {
+    expect(isGetPromptResult({ messages: [{ role: "user", content: { type: "text", text: "hi" } }] })).toBe(true);
+    expect(isGetPromptResult({ messages: [] })).toBe(true);
+  });
+
+  it("rejects domain strings and primitives", () => {
+    expect(isGetPromptResult("text")).toBe(false);
+    expect(isGetPromptResult(3)).toBe(false);
+    expect(isGetPromptResult(null)).toBe(false);
+  });
+});
+
+describe("mapPromptResult", () => {
+  it("wraps a string as one text message with an explicit role", () => {
+    const result = mapPromptResult("Assist with this task.", "assistant");
+
+    expect(result).toEqual({
+      messages: [{ role: "assistant", content: { type: "text", text: "Assist with this task." } }],
+    });
+  });
+
+  it("defaults the string shortcut role to user", () => {
+    const result = mapPromptResult("Review this.");
+
+    expect(result).toEqual({
+      messages: [{ role: "user", content: { type: "text", text: "Review this." } }],
+    });
+  });
+
+  it("passes an already-built mixed-role result through unchanged", () => {
+    const wireResult: GetPromptResult = {
+      messages: [
+        { role: "user", content: { type: "text", text: "question" } },
+        { role: "assistant", content: { type: "text", text: "answer" } },
+      ],
+    };
+
+    expect(mapPromptResult(wireResult)).toBe(wireResult);
   });
 });
 

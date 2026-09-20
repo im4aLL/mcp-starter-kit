@@ -1,6 +1,7 @@
 import type { Newable } from "inversify";
 
 import type { IMcpPromptHandler, IMcpResourceHandler, IMcpToolHandler } from "./handler.types";
+import type { IPromptMetadata } from "./prompt.types";
 import type { IResourceMetadata } from "./resource.types";
 import type { IToolMetadata } from "./tool.types";
 
@@ -33,11 +34,18 @@ export interface IResolvedResource {
 }
 
 /**
+ * A prompt constructor paired with its decorator metadata.
+ */
+export interface IResolvedPrompt {
+  readonly metadata: IPromptMetadata;
+  readonly instance: IMcpPromptHandler;
+}
+
+/**
  * Runtime capability shape consumed by server registration.
- *
- * Prompts are deferred, so only resolved tools and resources are produced.
  */
 export interface IResolvedCapabilities {
   readonly tools: readonly IResolvedTool[];
+  readonly prompts: readonly IResolvedPrompt[];
   readonly resources: readonly IResolvedResource[];
 }

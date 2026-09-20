@@ -8,8 +8,8 @@ import { inject, injectable } from "inversify";
 import { z } from "zod";
 
 import type { IProviderConfiguration } from "./container";
-import { resource, tool } from "./decorators";
-import type { ICapabilities, IMcpResourceHandler, IMcpToolHandler, IServerConfig } from "./types";
+import { prompt, resource, tool } from "./decorators";
+import type { ICapabilities, IMcpPromptHandler, IMcpResourceHandler, IMcpToolHandler, IServerConfig } from "./types";
 
 export const FixtureAddToolInputSchema = z.object({
   a: z.number(),
@@ -18,6 +18,10 @@ export const FixtureAddToolInputSchema = z.object({
 
 export const FixtureAddToolOutputSchema = z.object({
   result: z.number(),
+});
+
+export const FixtureCodeReviewPromptArgsSchema = z.object({
+  code: z.string(),
 });
 
 /**
@@ -90,9 +94,30 @@ export class FixtureProjectInfoResource implements IMcpResourceHandler {
   }
 }
 
+/**
+ * Decorated fixture prompt returning a review instruction string.
+ */
+@prompt({
+  name: "code_review",
+  description: "Requests a focused review of the supplied code.",
+  argsSchema: FixtureCodeReviewPromptArgsSchema,
+  role: "user",
+})
+export class FixtureCodeReviewPrompt implements IMcpPromptHandler {
+  /**
+   * Builds the fixture review instruction.
+   *
+   * @param args - Validated prompt arguments.
+   * @returns The prompt text.
+   */
+  public handler(args: z.output<typeof FixtureCodeReviewPromptArgsSchema>): string {
+    return `Review the following code:\n\n${args.code}`;
+  }
+}
+
 export const fixtureCapabilities: ICapabilities = {
   tools: [FixtureAddTool],
-  prompts: [],
+  prompts: [FixtureCodeReviewPrompt],
   resources: [FixtureProjectInfoResource],
 };
 

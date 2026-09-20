@@ -1,7 +1,13 @@
-import type { CallToolResult, ReadResourceResult } from "@modelcontextprotocol/server";
+import type { CallToolResult, GetPromptResult, ReadResourceResult } from "@modelcontextprotocol/server";
 
 import { logger } from "../utils/logger";
-import type { JsonObject, JsonValue, ResourceHandlerResultType, ToolHandlerResultType } from "./types";
+import type {
+  JsonObject,
+  JsonValue,
+  PromptHandlerResultType,
+  ResourceHandlerResultType,
+  ToolHandlerResultType,
+} from "./types";
 
 /**
  * Error thrown when a domain resource value cannot be serialized to MCP contents.
@@ -60,6 +66,26 @@ export function isReadResourceResult(value: unknown): value is ReadResourceResul
   const contents = (value as { readonly contents?: unknown }).contents;
 
   return Array.isArray(contents);
+}
+
+/**
+ * Determines whether a handler value is already an MCP prompt wire result.
+ *
+ * A prompt wire result carries a `messages` array. Passing it through keeps
+ * every message role and content type owned by the handler, so the decorator's
+ * string-shortcut role never restricts a mixed-role result.
+ *
+ * @param value - Handler value to inspect.
+ * @returns Whether the value already matches the `GetPromptResult` shape.
+ */
+export function isGetPromptResult(value: unknown): value is GetPromptResult {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const messages = (value as { readonly messages?: unknown }).messages;
+
+  return Array.isArray(messages);
 }
 
 /**
@@ -134,6 +160,33 @@ export function mapToolResult(output: ToolHandlerResultType<JsonObject>): CallTo
   return {
     content: [{ type: "text", text: JSON.stringify(output) }],
     structuredContent: output,
+  };
+}
+
+/**
+ * Maps a domain prompt value to an MCP prompt result.
+ *
+ * Already-built `{ messages }` results pass through unchanged, preserving every
+ * message role and content type. A string becomes one text message using `role`,
+ * which defaults to `"user"`. Core never parses the argument schema; the SDK
+ * owns argument application.
+ *
+ * @param value - Domain prompt string or an already-built `GetPromptResult`.
+ * @param role - Role for the string shortcut; ignored for `{ messages }` results.
+ * @returns An MCP `GetPromptResult`.
+ */
+export function mapPromptResult(value: PromptHandlerResultType, role: "user" | "assistant" = "user"): GetPromptResult {
+  if (isGetPromptResult(value)) {
+    return value;
+  }
+
+  return {
+    messages: [
+      {
+        role,
+        content: { type: "text", text: value },
+      },
+    ],
   };
 }
 

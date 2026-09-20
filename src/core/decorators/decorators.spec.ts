@@ -4,11 +4,13 @@ import {
   FixtureAddTool,
   FixtureAddToolInputSchema,
   FixtureAddToolOutputSchema,
+  FixtureCodeReviewPrompt,
+  FixtureCodeReviewPromptArgsSchema,
   FixtureProjectInfoResource,
 } from "../core-test-fixtures";
-import type { IMcpResourceHandler, IMcpToolHandler } from "../types";
-import type { ResourceDecoratorTargetType } from "./index";
-import { getResourceMetadata, getToolMetadata, resource, tool } from "./index";
+import type { IMcpPromptHandler, IMcpResourceHandler, IMcpToolHandler } from "../types";
+import type { PromptDecoratorTargetType, ResourceDecoratorTargetType } from "./index";
+import { getPromptMetadata, getResourceMetadata, getToolMetadata, prompt, resource, tool } from "./index";
 
 /**
  * Plain capability used to prove that undecorated constructors have no
@@ -41,6 +43,21 @@ class UndecoratedResource implements IMcpResourceHandler {
 }
 
 /**
+ * Plain prompt used to prove that undecorated constructors have no
+ * prompt metadata.
+ */
+class UndecoratedPrompt implements IMcpPromptHandler {
+  /**
+   * Returns a trivial prompt value.
+   *
+   * @returns A constant string.
+   */
+  public handler(): string {
+    return "prompt";
+  }
+}
+
+/**
  * Subclass used to prove that metadata is not inherited implicitly.
  */
 class ExtendedAddTool extends FixtureAddTool {}
@@ -49,6 +66,11 @@ class ExtendedAddTool extends FixtureAddTool {}
  * Resource subclass used to prove that resource metadata is not inherited.
  */
 class ExtendedProjectInfoResource extends FixtureProjectInfoResource {}
+
+/**
+ * Prompt subclass used to prove that prompt metadata is not inherited.
+ */
+class ExtendedCodeReviewPrompt extends FixtureCodeReviewPrompt {}
 
 describe("getToolMetadata", () => {
   it("reads the direct decorator-owned metadata", () => {
@@ -104,6 +126,41 @@ describe("getResourceMetadata", () => {
   });
 });
 
+describe("getPromptMetadata", () => {
+  it("reads the direct decorator-owned metadata", () => {
+    const metadata = getPromptMetadata(FixtureCodeReviewPrompt);
+
+    expect(metadata?.name).toBe("code_review");
+    expect(metadata?.description).toBe("Requests a focused review of the supplied code.");
+    expect(metadata?.argsSchema).toBe(FixtureCodeReviewPromptArgsSchema);
+    expect(metadata?.role).toBe("user");
+  });
+
+  it("returns undefined for an undecorated constructor", () => {
+    expect(getPromptMetadata(UndecoratedPrompt)).toBeUndefined();
+  });
+
+  it("does not inherit metadata from a decorated base class", () => {
+    expect(getPromptMetadata(ExtendedCodeReviewPrompt)).toBeUndefined();
+  });
+
+  it("stores frozen metadata", () => {
+    expect(Object.isFrozen(getPromptMetadata(FixtureCodeReviewPrompt))).toBe(true);
+  });
+
+  it("rejects reading a prompt as a tool", () => {
+    expect(() => getToolMetadata(FixtureCodeReviewPrompt)).toThrow(/not a tool/);
+  });
+
+  it("rejects reading a prompt as a resource", () => {
+    expect(() => getResourceMetadata(FixtureCodeReviewPrompt)).toThrow(/not a resource/);
+  });
+
+  it("rejects reading a tool as a prompt", () => {
+    expect(() => getPromptMetadata(FixtureAddTool)).toThrow(/not a prompt/);
+  });
+});
+
 describe("@tool", () => {
   it("rejects a constructor that already has a capability decorator", () => {
     expect(() => {
@@ -155,5 +212,21 @@ describe("@resource", () => {
 
   it("does not replace the decorated constructor", () => {
     expect(FixtureProjectInfoResource.prototype.constructor).toBe(FixtureProjectInfoResource);
+  });
+});
+
+describe("@prompt", () => {
+  it("rejects a constructor that already has a capability decorator", () => {
+    expect(() => {
+      prompt({
+        name: "second",
+        description: "Second decoration attempt.",
+        argsSchema: FixtureCodeReviewPromptArgsSchema,
+      })(FixtureAddTool as unknown as PromptDecoratorTargetType<typeof FixtureCodeReviewPromptArgsSchema>);
+    }).toThrow(/already has a capability decorator/);
+  });
+
+  it("does not replace the decorated constructor", () => {
+    expect(FixtureCodeReviewPrompt.prototype.constructor).toBe(FixtureCodeReviewPrompt);
   });
 });

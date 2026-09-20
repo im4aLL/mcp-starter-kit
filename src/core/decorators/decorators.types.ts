@@ -2,17 +2,20 @@ import type { Newable } from "inversify";
 import type { z } from "zod";
 
 import type {
+  IMcpPromptHandler,
   IMcpResourceHandler,
   IMcpToolHandler,
+  IPromptMetadata,
   IResourceMetadata,
   IToolMetadata,
   JsonObject,
   McpRequestExtraType,
+  PromptHandlerResultType,
   ToolHandlerResultType,
 } from "../types";
 
 // Capability kinds recorded by capability decorators.
-export type CapabilityKindType = "tool" | "resource";
+export type CapabilityKindType = "tool" | "resource" | "prompt";
 
 // Stored tool metadata, discriminated by kind for pre-registration checks.
 export interface IStoredToolCapabilityMetadata {
@@ -26,8 +29,17 @@ export interface IStoredResourceCapabilityMetadata {
   readonly metadata: IResourceMetadata;
 }
 
+// Stored prompt metadata, discriminated by kind for pre-registration checks.
+export interface IStoredPromptCapabilityMetadata {
+  readonly kind: "prompt";
+  readonly metadata: IPromptMetadata;
+}
+
 // Union of every stored capability metadata shape.
-export type StoredCapabilityMetadataType = IStoredToolCapabilityMetadata | IStoredResourceCapabilityMetadata;
+export type StoredCapabilityMetadataType =
+  | IStoredToolCapabilityMetadata
+  | IStoredResourceCapabilityMetadata
+  | IStoredPromptCapabilityMetadata;
 
 /**
  * A constructor the typed `@tool` decorator accepts.
@@ -56,3 +68,20 @@ export type ToolDecoratorTargetType<
  * schema-derived typing step, so the contract is the authoring constraint.
  */
 export type ResourceDecoratorTargetType = Newable<IMcpResourceHandler>;
+
+/**
+ * A constructor the typed `@prompt` decorator accepts.
+ *
+ * The handler must accept `z.output<TArgsSchema>` and return the allowed
+ * prompt result: a string shortcut or already-built messages. Constructor
+ * parameter shapes are left open so constructor-injected capabilities stay
+ * assignable.
+ */
+export type PromptDecoratorTargetType<TArgsSchema extends z.ZodType> = Newable<
+  IMcpPromptHandler & {
+    handler(
+      args: z.output<TArgsSchema>,
+      extra?: McpRequestExtraType,
+    ): PromptHandlerResultType | Promise<PromptHandlerResultType>;
+  }
+>;

@@ -1,11 +1,13 @@
 import type { Container, Newable } from "inversify";
 
-import { getResourceMetadata, getToolMetadata } from "./decorators";
+import { getPromptMetadata, getResourceMetadata, getToolMetadata } from "./decorators";
 import type {
   ICapabilities,
+  IMcpPromptHandler,
   IMcpResourceHandler,
   IMcpToolHandler,
   IResolvedCapabilities,
+  IResolvedPrompt,
   IResolvedResource,
   IResolvedTool,
 } from "./types";
@@ -52,28 +54,44 @@ function resolveResource(container: Container, resourceConstructor: Newable<IMcp
 }
 
 /**
+ * Resolves one listed prompt constructor into metadata plus an instance.
+ *
+ * @param container - Per-server container holding the constructor binding.
+ * @param promptConstructor - Prompt constructor listed by the application.
+ * @returns The resolved prompt record.
+ * @throws Error when the constructor lacks `@prompt` metadata or carries a
+ * different capability decorator.
+ */
+function resolvePrompt(container: Container, promptConstructor: Newable<IMcpPromptHandler>): IResolvedPrompt {
+  const metadata = getPromptMetadata(promptConstructor);
+
+  if (metadata === undefined) {
+    throw new Error(`Prompt constructor "${promptConstructor.name}" is missing the @prompt decorator.`);
+  }
+
+  const instance = container.get(promptConstructor);
+
+  return { metadata, instance };
+}
+
+/**
  * Resolves the listed capability constructors through a per-server container.
  *
  * Validation happens before server registration, so a misconfigured capability
- * fails at composition time rather than on first invocation. Prompt resolution
- * is deferred; a non-empty prompt list is rejected explicitly instead of being
- * silently dropped.
+ * fails at composition time rather than on first invocation.
  *
  * @param container - Per-server container to resolve from.
  * @param capabilityTypes - Explicit capability constructor lists.
  * @returns Resolved runtime capabilities for registration.
- * @throws Error when a listed constructor lacks its decorator or an
- * unimplemented capability kind is listed.
+ * @throws Error when a listed constructor lacks its decorator or carries a
+ * different capability decorator.
  */
 export function resolveCapabilities(container: Container, capabilityTypes: ICapabilities): IResolvedCapabilities {
-  if (capabilityTypes.prompts.length > 0) {
-    throw new Error("Prompt capability resolution is not implemented yet.");
-  }
-
   const tools = capabilityTypes.tools.map((toolConstructor) => resolveTool(container, toolConstructor));
+  const prompts = capabilityTypes.prompts.map((promptConstructor) => resolvePrompt(container, promptConstructor));
   const resources = capabilityTypes.resources.map((resourceConstructor) =>
     resolveResource(container, resourceConstructor),
   );
 
-  return { tools, resources };
+  return { tools, prompts, resources };
 }

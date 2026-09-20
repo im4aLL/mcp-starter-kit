@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/server";
 
-import { mapResourceResult, mapToolError, mapToolResult } from "./map-results";
-import type { IResolvedCapabilities, IResolvedResource, IResolvedTool } from "./types";
+import { mapPromptResult, mapResourceResult, mapToolError, mapToolResult } from "./map-results";
+import type { IResolvedCapabilities, IResolvedPrompt, IResolvedResource, IResolvedTool } from "./types";
 
 /**
  * Registers one resolved tool with the SDK.
@@ -66,6 +66,31 @@ function registerResource(server: McpServer, resolved: IResolvedResource): void 
 }
 
 /**
+ * Registers one resolved prompt with the SDK.
+ *
+ * The decorator-owned description and argument schema are passed to the SDK,
+ * which owns argument validation. The wrapper forwards the parsed arguments
+ * and the request-extra argument unchanged and maps the handler value without
+ * parsing the schema in core. The string shortcut uses the decorator role;
+ * already-built `{ messages }` results pass through with their own roles.
+ *
+ * @param server - Server receiving the prompt registration.
+ * @param resolved - Resolved prompt metadata and instance.
+ */
+function registerPrompt(server: McpServer, resolved: IResolvedPrompt): void {
+  const { metadata, instance } = resolved;
+
+  server.registerPrompt(
+    metadata.name,
+    {
+      description: metadata.description,
+      argsSchema: metadata.argsSchema,
+    },
+    async (args, extra) => mapPromptResult(await instance.handler(args, extra), metadata.role),
+  );
+}
+
+/**
  * Registers resolved runtime capabilities with a server.
  *
  * @param server - Server receiving the registrations.
@@ -74,6 +99,10 @@ function registerResource(server: McpServer, resolved: IResolvedResource): void 
 export function registerCapabilities(server: McpServer, capabilities: IResolvedCapabilities): void {
   for (const tool of capabilities.tools) {
     registerTool(server, tool);
+  }
+
+  for (const prompt of capabilities.prompts) {
+    registerPrompt(server, prompt);
   }
 
   for (const resource of capabilities.resources) {

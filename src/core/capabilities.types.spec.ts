@@ -5,15 +5,16 @@ import { z } from "zod";
 import { createAppContainer } from "./container";
 import {
   FixtureAddTool,
+  FixtureCodeReviewPrompt,
   FixtureProjectInfoResource,
   fixtureCapabilities,
   fixtureProviders,
   fixtureServerConfig,
 } from "./core-test-fixtures";
 import { createServer } from "./create-server";
-import { tool } from "./decorators";
+import { prompt, tool } from "./decorators";
 import { resolveCapabilities } from "./resolve-capabilities";
-import type { ICapabilities, IMcpToolHandler } from "./types";
+import type { ICapabilities, IMcpPromptHandler, IMcpToolHandler } from "./types";
 
 const ConvertToolInputSchema = z.object({ value: z.number() });
 const ConvertToolOutputSchema = z.object({ text: z.string() });
@@ -90,13 +91,39 @@ class BadTool implements IMcpToolHandler {
   }
 }
 
+const BadPromptArgsSchema = z.object({ code: z.string() });
+
+// @ts-expect-error - the handler argument does not match the prompt args schema.
+@prompt({
+  name: "bad_prompt",
+  description: "Type fixture rejected by the prompt decorator.",
+  argsSchema: BadPromptArgsSchema,
+})
+class BadPrompt implements IMcpPromptHandler {
+  /**
+   * Returns a prompt text for an incompatible argument shape.
+   *
+   * The erased handler contract accepts `unknown`; only the typed `@prompt`
+   * decorator rejects this argument shape.
+   *
+   * @param args - Mismatched prompt arguments.
+   * @returns The message text.
+   */
+  public handler(args: { readonly message: string }): string {
+    return args.message;
+  }
+}
+
 const heterogeneousTools: ICapabilities["tools"] = [FixtureAddTool, ConvertTool];
+const heterogeneousPrompts: ICapabilities["prompts"] = [FixtureCodeReviewPrompt];
 const heterogeneousResources: ICapabilities["resources"] = [FixtureProjectInfoResource];
 
 describe("capability type integration", () => {
   it("accepts heterogeneous decorated constructors in one list", () => {
     expect(heterogeneousTools).toHaveLength(2);
     expect(heterogeneousTools[0]).toBe(FixtureAddTool);
+    expect(heterogeneousPrompts).toHaveLength(1);
+    expect(heterogeneousPrompts[0]).toBe(FixtureCodeReviewPrompt);
     expect(heterogeneousResources).toHaveLength(1);
     expect(heterogeneousResources[0]).toBe(FixtureProjectInfoResource);
   });
@@ -124,8 +151,19 @@ describe("capability type integration", () => {
     expect(resource?.instance.handler("project://info")).toBe("A class-based MCP server starter.");
   });
 
+  it("resolves and invokes the erased prompt handler without casts", () => {
+    const container = createAppContainer(fixtureCapabilities, fixtureProviders);
+    const capabilities = resolveCapabilities(container, fixtureCapabilities);
+    const resolved = capabilities.prompts[0];
+
+    expect(fixtureCapabilities.prompts).toContain(FixtureCodeReviewPrompt);
+    expect(resolved?.instance).toBeInstanceOf(FixtureCodeReviewPrompt);
+    expect(resolved?.instance.handler({ code: "const x = 1;" })).toBe("Review the following code:\n\nconst x = 1;");
+  });
+
   it("keeps the negative fixture reachable for the compile-time assertion", () => {
     expect(BadTool).toBeDefined();
+    expect(BadPrompt).toBeDefined();
     expect(ConvertTool).toBeDefined();
   });
 });

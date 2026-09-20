@@ -1,19 +1,24 @@
-import type { CallToolResult, McpServer, ReadResourceResult } from "@modelcontextprotocol/server";
+import type { CallToolResult, GetPromptResult, McpServer, ReadResourceResult } from "@modelcontextprotocol/server";
 import { describe, expect, it, vi } from "vitest";
 
 import {
   FixtureAddTool,
   FixtureAddToolInputSchema,
   FixtureAddToolOutputSchema,
+  FixtureCodeReviewPrompt,
+  FixtureCodeReviewPromptArgsSchema,
   FixtureProjectInfoResource,
 } from "./core-test-fixtures";
-import { getResourceMetadata, getToolMetadata } from "./decorators";
+import { getPromptMetadata, getResourceMetadata, getToolMetadata } from "./decorators";
 import { ResourceSerializationError } from "./map-results";
 import { registerCapabilities } from "./register-capabilities";
 import type {
+  IMcpPromptHandler,
   IMcpResourceHandler,
   IMcpToolHandler,
+  IPromptMetadata,
   IResolvedCapabilities,
+  IResolvedPrompt,
   IResolvedResource,
   IResolvedTool,
   IResourceMetadata,
@@ -40,6 +45,16 @@ interface ICapturedResourceRegistration {
     readonly mimeType?: string;
   };
   readonly callback: (uri: URL, extra: unknown) => Promise<ReadResourceResult>;
+}
+
+// Prompt registration captured from a minimal server stand-in.
+interface ICapturedPromptRegistration {
+  readonly name: string;
+  readonly config: {
+    readonly description?: string;
+    readonly argsSchema?: unknown;
+  };
+  readonly callback: (args: unknown, extra: unknown) => Promise<GetPromptResult>;
 }
 
 /**
@@ -73,6 +88,21 @@ function requireFixtureResourceMetadata(): IResourceMetadata {
 }
 
 /**
+ * Reads the decorator-owned fixture prompt metadata, failing loudly when absent.
+ *
+ * @returns The fixture prompt metadata.
+ */
+function requireFixturePromptMetadata(): IPromptMetadata {
+  const metadata = getPromptMetadata(FixtureCodeReviewPrompt);
+
+  if (metadata === undefined) {
+    throw new Error("FixtureCodeReviewPrompt metadata was not found.");
+  }
+
+  return metadata;
+}
+
+/**
  * Builds a resolved tool record around a spy handler.
  *
  * @param handler - Handler implementation to wrap.
@@ -93,16 +123,28 @@ function createResolvedResource(handler: IMcpResourceHandler["handler"]): IResol
 }
 
 /**
+ * Builds a resolved prompt record around a spy handler.
+ *
+ * @param handler - Handler implementation to wrap.
+ * @returns A resolved prompt record with fixture prompt metadata.
+ */
+function createResolvedPrompt(handler: IMcpPromptHandler["handler"]): IResolvedPrompt {
+  return { metadata: requireFixturePromptMetadata(), instance: { handler } };
+}
+
+/**
  * Creates a minimal `McpServer` stand-in that records capability registrations.
  *
- * @returns The stand-in server plus its captured tool and resource registrations.
+ * @returns The stand-in server plus its captured tool, prompt, and resource registrations.
  */
 function createCapturingServer(): {
   server: McpServer;
   registrations: ICapturedRegistration[];
+  promptRegistrations: ICapturedPromptRegistration[];
   resourceRegistrations: ICapturedResourceRegistration[];
 } {
   const registrations: ICapturedRegistration[] = [];
+  const promptRegistrations: ICapturedPromptRegistration[] = [];
   const resourceRegistrations: ICapturedResourceRegistration[] = [];
 
   const server = {
@@ -120,6 +162,22 @@ function createCapturingServer(): {
       callback: ICapturedRegistration["callback"],
     ): undefined {
       registrations.push({ name, config, callback });
+      return undefined;
+    },
+    /**
+     * Records a prompt registration instead of hitting the SDK.
+     *
+     * @param name - Registered prompt name.
+     * @param config - Registered prompt configuration.
+     * @param callback - Registered prompt callback.
+     * @returns Nothing.
+     */
+    registerPrompt(
+      name: string,
+      config: ICapturedPromptRegistration["config"],
+      callback: ICapturedPromptRegistration["callback"],
+    ): undefined {
+      promptRegistrations.push({ name, config, callback });
       return undefined;
     },
     /**
@@ -142,14 +200,14 @@ function createCapturingServer(): {
     },
   } as unknown as McpServer;
 
-  return { server, registrations, resourceRegistrations };
+  return { server, registrations, promptRegistrations, resourceRegistrations };
 }
 
 describe("registerCapabilities", () => {
   it("registers the decorator-owned name, description, and schemas", () => {
     const { server, registrations } = createCapturingServer();
 
-    registerCapabilities(server, { tools: [createResolvedTool(vi.fn())], resources: [] });
+    registerCapabilities(server, { tools: [createResolvedTool(vi.fn())], prompts: [], resources: [] });
 
     expect(registrations).toHaveLength(1);
     expect(registrations[0]?.name).toBe("add");
@@ -163,7 +221,7 @@ describe("registerCapabilities", () => {
     const { server, registrations } = createCapturingServer();
     const extra = { forwarded: true };
 
-    registerCapabilities(server, { tools: [createResolvedTool(handler)], resources: [] });
+    registerCapabilities(server, { tools: [createResolvedTool(handler)], prompts: [], resources: [] });
 
     const result = await registrations[0]?.callback({ a: 1, b: 2 }, extra);
 
@@ -178,7 +236,7 @@ describe("registerCapabilities", () => {
     const handler = vi.fn().mockRejectedValue(new Error("boom"));
     const { server, registrations } = createCapturingServer();
 
-    registerCapabilities(server, { tools: [createResolvedTool(handler)], resources: [] });
+    registerCapabilities(server, { tools: [createResolvedTool(handler)], prompts: [], resources: [] });
 
     const result = await registrations[0]?.callback({ a: 1, b: 2 }, undefined);
 
@@ -189,19 +247,65 @@ describe("registerCapabilities", () => {
   });
 
   it("registers nothing when there are no capabilities", () => {
-    const { server, registrations, resourceRegistrations } = createCapturingServer();
-    const empty: IResolvedCapabilities = { tools: [], resources: [] };
+    const { server, registrations, promptRegistrations, resourceRegistrations } = createCapturingServer();
+    const empty: IResolvedCapabilities = { tools: [], prompts: [], resources: [] };
 
     registerCapabilities(server, empty);
 
     expect(registrations).toHaveLength(0);
+    expect(promptRegistrations).toHaveLength(0);
     expect(resourceRegistrations).toHaveLength(0);
+  });
+
+  it("registers the decorator-owned prompt name, description, and argument schema", () => {
+    const { server, promptRegistrations } = createCapturingServer();
+
+    registerCapabilities(server, { tools: [], prompts: [createResolvedPrompt(vi.fn())], resources: [] });
+
+    expect(promptRegistrations).toHaveLength(1);
+    expect(promptRegistrations[0]?.name).toBe("code_review");
+    expect(promptRegistrations[0]?.config.description).toBe("Requests a focused review of the supplied code.");
+    expect(promptRegistrations[0]?.config.argsSchema).toBe(FixtureCodeReviewPromptArgsSchema);
+  });
+
+  it("maps a string prompt with the decorator role and forwards arguments plus extra unchanged", async () => {
+    const handler = vi.fn().mockResolvedValue("Review the following code:\n\nconst x = 1;");
+    const { server, promptRegistrations } = createCapturingServer();
+    const extra = { forwarded: true };
+
+    registerCapabilities(server, { tools: [], prompts: [createResolvedPrompt(handler)], resources: [] });
+
+    const result = await promptRegistrations[0]?.callback({ code: "const x = 1;" }, extra);
+
+    expect(handler).toHaveBeenCalledWith({ code: "const x = 1;" }, extra);
+    expect(result).toEqual({
+      messages: [{ role: "user", content: { type: "text", text: "Review the following code:\n\nconst x = 1;" } }],
+    });
+  });
+
+  it("passes an already-built mixed-role prompt result through unchanged", async () => {
+    const wireResult: GetPromptResult = {
+      messages: [
+        { role: "user", content: { type: "text", text: "first" } },
+        { role: "assistant", content: { type: "text", text: "second" } },
+      ],
+    };
+    const handler = vi.fn().mockResolvedValue(wireResult);
+    const { server, promptRegistrations } = createCapturingServer();
+    const extra = { forwarded: true };
+
+    registerCapabilities(server, { tools: [], prompts: [createResolvedPrompt(handler)], resources: [] });
+
+    const result = await promptRegistrations[0]?.callback({ code: "unused" }, extra);
+
+    expect(handler).toHaveBeenCalledWith({ code: "unused" }, extra);
+    expect(result).toBe(wireResult);
   });
 
   it("registers the decorator-owned resource name, URI, and MIME hint", () => {
     const { server, resourceRegistrations } = createCapturingServer();
 
-    registerCapabilities(server, { tools: [], resources: [createResolvedResource(vi.fn())] });
+    registerCapabilities(server, { tools: [], prompts: [], resources: [createResolvedResource(vi.fn())] });
 
     expect(resourceRegistrations).toHaveLength(1);
     expect(resourceRegistrations[0]?.name).toBe("Project information");
@@ -215,7 +319,7 @@ describe("registerCapabilities", () => {
     const { server, resourceRegistrations } = createCapturingServer();
     const extra = { forwarded: true };
 
-    registerCapabilities(server, { tools: [], resources: [createResolvedResource(handler)] });
+    registerCapabilities(server, { tools: [], prompts: [], resources: [createResolvedResource(handler)] });
 
     const result = await resourceRegistrations[0]?.callback(new URL("project://info"), extra);
 
@@ -229,7 +333,7 @@ describe("registerCapabilities", () => {
     const handler = vi.fn().mockResolvedValue({ name: "starter" });
     const { server, resourceRegistrations } = createCapturingServer();
 
-    registerCapabilities(server, { tools: [], resources: [createResolvedResource(handler)] });
+    registerCapabilities(server, { tools: [], prompts: [], resources: [createResolvedResource(handler)] });
 
     const result = await resourceRegistrations[0]?.callback(new URL("project://info"), undefined);
 
@@ -242,7 +346,7 @@ describe("registerCapabilities", () => {
     const handler = vi.fn().mockResolvedValue(undefined);
     const { server, resourceRegistrations } = createCapturingServer();
 
-    registerCapabilities(server, { tools: [], resources: [createResolvedResource(handler)] });
+    registerCapabilities(server, { tools: [], prompts: [], resources: [createResolvedResource(handler)] });
 
     await expect(resourceRegistrations[0]?.callback(new URL("project://info"), undefined)).rejects.toBeInstanceOf(
       ResourceSerializationError,

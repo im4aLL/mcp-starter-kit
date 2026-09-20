@@ -1,4 +1,5 @@
 import type { ICapabilities } from "../core/types";
+import { CodeReviewPrompt } from "../prompts/code-review/code-review";
 import { ProjectInfoResource } from "../resources/project-info/project-info";
 import { AddTool } from "../tools/add-tool/add-tool";
 
@@ -14,7 +15,7 @@ import { AddTool } from "../tools/add-tool/add-tool";
 export function getCapabilityTypes(): ICapabilities {
   return {
     tools: [AddTool],
-    prompts: [],
+    prompts: [CodeReviewPrompt],
     resources: [ProjectInfoResource],
   };
 }

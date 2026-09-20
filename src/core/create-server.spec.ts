@@ -34,7 +34,7 @@ vi.mock("@modelcontextprotocol/server", async (importOriginal) => {
   return { ...actual, McpServer: ObservedMcpServer };
 });
 
-const emptyCapabilities: IResolvedCapabilities = { tools: [], resources: [] };
+const emptyCapabilities: IResolvedCapabilities = { tools: [], prompts: [], resources: [] };
 
 const testServerConfig: IServerConfig = { name: "test-server", version: "9.9.9" };
 

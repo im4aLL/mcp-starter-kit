@@ -8,6 +8,7 @@ import { createAppContainer } from "./container";
 import {
   FixtureAddTool,
   FixtureCalculatorService,
+  FixtureCodeReviewPrompt,
   FixtureProjectInfoResource,
   fixtureCapabilities,
   fixtureProviders,
@@ -32,6 +33,7 @@ describe("createAppContainer", () => {
     const container = createAppContainer(fixtureCapabilities, fixtureProviders);
 
     expect(container.get(FixtureAddTool)).toBeInstanceOf(FixtureAddTool);
+    expect(container.get(FixtureCodeReviewPrompt)).toBeInstanceOf(FixtureCodeReviewPrompt);
     expect(container.get(FixtureProjectInfoResource)).toBeInstanceOf(FixtureProjectInfoResource);
   });
 

@@ -1,4 +1,4 @@
-import type { CallToolResult, PromptMessage, ResourceContents, ServerContext } from "@modelcontextprotocol/server";
+import type { CallToolResult, GetPromptResult, ResourceContents, ServerContext } from "@modelcontextprotocol/server";
 
 import type { JsonObject, JsonValue } from "./json.types";
 
@@ -13,8 +13,8 @@ export type ResourceHandlerResultType<T extends JsonValue = JsonValue> =
   | T
   | { readonly contents: readonly ResourceContents[] };
 
-// Prompt results are a string (wrapped with a role) or already-built messages.
-export type PromptHandlerResultType = string | { readonly messages: readonly PromptMessage[] };
+// Prompt results are a string (wrapped with a role) or an already-built SDK result.
+export type PromptHandlerResultType = string | GetPromptResult;
 
 /**
  * Erased runtime contract every tool class implements.
@@ -44,8 +44,9 @@ export interface IMcpResourceHandler {
 /**
  * Erased runtime contract every prompt class implements.
  *
- * Prompts are deferred; the contract exists so capability lists stay
- * uniformly typed.
+ * The arguments are `unknown` and the method uses method syntax so specifically
+ * typed class handlers remain assignable. Schema-specific checking belongs to
+ * the typed `@prompt` decorator, not this contract.
  */
 export interface IMcpPromptHandler {
   handler(args: unknown, extra?: McpRequestExtraType): PromptHandlerResultType | Promise<PromptHandlerResultType>;

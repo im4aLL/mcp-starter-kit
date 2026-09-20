@@ -4,11 +4,13 @@ import { describe, expect, it } from "vitest";
 import { createAppContainer } from "./container";
 import {
   FixtureAddTool,
+  FixtureCodeReviewPrompt,
+  FixtureCodeReviewPromptArgsSchema,
   FixtureProjectInfoResource,
   fixtureCapabilities,
   fixtureProviders,
 } from "./core-test-fixtures";
-import { getResourceMetadata, resource } from "./decorators";
+import { getPromptMetadata, getResourceMetadata, prompt, resource } from "./decorators";
 import { resolveCapabilities } from "./resolve-capabilities";
 import type { ICapabilities, IMcpPromptHandler, IMcpResourceHandler, IMcpToolHandler } from "./types";
 
@@ -41,7 +43,7 @@ class UndecoratedResource implements IMcpResourceHandler {
 }
 
 /**
- * Prompt candidate used to prove unimplemented kinds are rejected.
+ * Prompt candidate that never received the `@prompt` decorator.
  */
 class UndecoratedPrompt implements IMcpPromptHandler {
   /**
@@ -79,6 +81,34 @@ class CountingResource implements IMcpResourceHandler {
    */
   public handler(): string {
     return "counted";
+  }
+}
+
+let countingPromptInstantiations = 0;
+
+/**
+ * Decorated prompt that records each instantiation.
+ */
+@prompt({
+  name: "counting_prompt",
+  description: "Counts instantiations.",
+  argsSchema: FixtureCodeReviewPromptArgsSchema,
+})
+class CountingPrompt implements IMcpPromptHandler {
+  /**
+   * Creates the counting prompt and records the instantiation.
+   */
+  public constructor() {
+    countingPromptInstantiations += 1;
+  }
+
+  /**
+   * Returns a trivial prompt value.
+   *
+   * @returns A constant string.
+   */
+  public handler(): string {
+    return "counted prompt";
   }
 }
 
@@ -123,6 +153,28 @@ describe("resolveCapabilities", () => {
     expect(output).toBe("A class-based MCP server starter.");
   });
 
+  it("resolves the decorated prompt with its metadata and instance", () => {
+    const container = createAppContainer(fixtureCapabilities, fixtureProviders);
+
+    const capabilities = resolveCapabilities(container, fixtureCapabilities);
+
+    expect(capabilities.prompts).toHaveLength(1);
+    expect(capabilities.prompts[0]?.metadata.name).toBe("code_review");
+    expect(capabilities.prompts[0]?.metadata.description).toBe("Requests a focused review of the supplied code.");
+    expect(capabilities.prompts[0]?.metadata.argsSchema).toBe(FixtureCodeReviewPromptArgsSchema);
+    expect(capabilities.prompts[0]?.metadata.role).toBe("user");
+    expect(capabilities.prompts[0]?.instance).toBeInstanceOf(FixtureCodeReviewPrompt);
+  });
+
+  it("resolves a prompt handler without parsing the arguments", () => {
+    const container = createAppContainer(fixtureCapabilities, fixtureProviders);
+
+    const capabilities = resolveCapabilities(container, fixtureCapabilities);
+    const output = capabilities.prompts[0]?.instance.handler({ code: "const x = 1;" });
+
+    expect(output).toBe("Review the following code:\n\nconst x = 1;");
+  });
+
   it("fails before registration when a listed constructor lacks @tool", () => {
     const capabilityTypes: ICapabilities = { tools: [UndecoratedTool], prompts: [], resources: [] };
     const container = createAppContainer(capabilityTypes, fixtureProviders);
@@ -137,6 +189,13 @@ describe("resolveCapabilities", () => {
     expect(() => resolveCapabilities(container, capabilityTypes)).toThrow(/missing the @resource decorator/);
   });
 
+  it("fails before registration when a listed constructor lacks @prompt", () => {
+    const capabilityTypes: ICapabilities = { tools: [], prompts: [UndecoratedPrompt], resources: [] };
+    const container = createAppContainer(capabilityTypes, fixtureProviders);
+
+    expect(() => resolveCapabilities(container, capabilityTypes)).toThrow(/missing the @prompt decorator/);
+  });
+
   it("fails before registration when a resource is listed under the wrong kind", () => {
     const capabilityTypes: ICapabilities = {
       tools: [],
@@ -148,13 +207,15 @@ describe("resolveCapabilities", () => {
     expect(() => resolveCapabilities(container, capabilityTypes)).toThrow(/decorated as a tool, not a resource/);
   });
 
-  it("rejects unimplemented prompt capability kinds instead of dropping them", () => {
-    expect(() =>
-      resolveCapabilities(createAppContainer(fixtureCapabilities, fixtureProviders), {
-        ...fixtureCapabilities,
-        prompts: [UndecoratedPrompt],
-      }),
-    ).toThrow(/not implemented/);
+  it("fails before registration when a tool is listed under the prompts kind", () => {
+    const capabilityTypes: ICapabilities = {
+      tools: [],
+      prompts: [FixtureAddTool as unknown as Newable<IMcpPromptHandler>],
+      resources: [],
+    };
+    const container = createAppContainer(capabilityTypes, fixtureProviders);
+
+    expect(() => resolveCapabilities(container, capabilityTypes)).toThrow(/decorated as a tool, not a prompt/);
   });
 
   it("produces isolated instances across per-server containers", () => {
@@ -162,6 +223,7 @@ describe("resolveCapabilities", () => {
     const second = resolveCapabilities(createAppContainer(fixtureCapabilities, fixtureProviders), fixtureCapabilities);
 
     expect(first.tools[0]?.instance).not.toBe(second.tools[0]?.instance);
+    expect(first.prompts[0]?.instance).not.toBe(second.prompts[0]?.instance);
     expect(first.resources[0]?.instance).not.toBe(second.resources[0]?.instance);
   });
 });
@@ -182,5 +244,24 @@ describe("resource instantiation", () => {
     expect(capabilities.resources[0]?.instance).toBeInstanceOf(CountingResource);
     expect(capabilities.resources[0]?.instance.handler("test://counting")).toBe("counted");
     expect(countingInstantiations).toBe(1);
+  });
+});
+
+describe("prompt instantiation", () => {
+  it("instantiates only on runtime resolution, not from metadata listing or binding", () => {
+    countingPromptInstantiations = 0;
+
+    expect(getPromptMetadata(CountingPrompt)?.name).toBe("counting_prompt");
+
+    const capabilityTypes: ICapabilities = { tools: [], prompts: [CountingPrompt], resources: [] };
+    const container = createAppContainer(capabilityTypes, fixtureProviders);
+
+    expect(countingPromptInstantiations).toBe(0);
+
+    const capabilities = resolveCapabilities(container, capabilityTypes);
+
+    expect(capabilities.prompts[0]?.instance).toBeInstanceOf(CountingPrompt);
+    expect(capabilities.prompts[0]?.instance.handler({ code: "x" })).toBe("counted prompt");
+    expect(countingPromptInstantiations).toBe(1);
   });
 });

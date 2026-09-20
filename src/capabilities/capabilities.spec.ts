@@ -1,5 +1,6 @@
 import {
   type CallToolResult,
+  type GetPromptResult,
   InMemoryTransport,
   type JSONRPCMessage,
   type McpServer,
@@ -14,6 +15,7 @@ import { getResourceMetadata } from "../core/decorators";
 import { ResourceSerializationError } from "../core/map-results";
 import { resolveCapabilities } from "../core/resolve-capabilities";
 import type { IMcpResourceHandler, IResolvedCapabilities, IResolvedResource } from "../core/types";
+import { CodeReviewPrompt } from "../prompts/code-review/code-review";
 import { providers } from "../providers";
 import { ProjectInfoResource } from "../resources/project-info/project-info";
 import { CalculatorService } from "../services/calculator-service";
@@ -105,10 +107,11 @@ describe("application capability composition", () => {
     expect(providers.services).toContain(CalculatorService);
   });
 
-  it("includes AddTool and ProjectInfoResource in the capability types", () => {
+  it("includes AddTool, CodeReviewPrompt, and ProjectInfoResource in the capability types", () => {
     const capabilityTypes = getCapabilityTypes();
 
     expect(capabilityTypes.tools).toContain(AddTool);
+    expect(capabilityTypes.prompts).toContain(CodeReviewPrompt);
     expect(capabilityTypes.resources).toContain(ProjectInfoResource);
   });
 
@@ -134,6 +137,16 @@ describe("application capability composition", () => {
 
     expect(resource?.instance).toBeInstanceOf(ProjectInfoResource);
     expect(resource?.instance.handler("project://info")).toBe("A class-based MCP server starter.");
+  });
+
+  it("resolves and invokes the erased prompt handler without casts", () => {
+    const capabilityTypes = getCapabilityTypes();
+    const container = createAppContainer(capabilityTypes, providers);
+    const capabilities = resolveCapabilities(container, capabilityTypes);
+    const resolved = capabilities.prompts[0];
+
+    expect(resolved?.instance).toBeInstanceOf(CodeReviewPrompt);
+    expect(resolved?.instance.handler({ code: "const x = 1;" })).toBe("Review the following code:\n\nconst x = 1;");
   });
 });
 
@@ -249,6 +262,7 @@ describe("SDK resource validation", () => {
     const handler = vi.fn().mockResolvedValue(undefined);
     const capabilities: IResolvedCapabilities = {
       tools: [],
+      prompts: [],
       resources: [createUnserializableResolvedResource(handler)],
     };
     const errorSpy = vi.spyOn(logger, "error").mockImplementation(() => logger);
@@ -279,5 +293,81 @@ describe("SDK resource validation", () => {
       "resource serialization failed",
     );
     expect(stdoutSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("SDK prompt validation", () => {
+  it("lists code_review and returns a user message containing the supplied code", async () => {
+    const capabilityTypes = getCapabilityTypes();
+    const container = createAppContainer(capabilityTypes, providers);
+    const capabilities = resolveCapabilities(container, capabilityTypes);
+    const codeReview = capabilities.prompts[0];
+
+    if (codeReview === undefined) {
+      throw new Error("CodeReviewPrompt was not resolved.");
+    }
+
+    const handlerSpy = vi.spyOn(codeReview.instance, "handler");
+    const server = createServer(capabilities, serverConfig);
+    const client = await connectTestClient(server);
+
+    try {
+      const init = await client.request(1, "initialize", {
+        protocolVersion: "2025-11-25",
+        capabilities: {},
+        clientInfo: { name: "test-client", version: "1.0.0" },
+      });
+      expect(init.error).toBeUndefined();
+
+      await client.notify("notifications/initialized");
+
+      const list = await client.request(2, "prompts/list", {});
+      const listedPrompts = (
+        list.result as {
+          prompts: readonly {
+            name: string;
+            description?: string;
+            arguments?: readonly { name: string; required?: boolean }[];
+          }[];
+        }
+      ).prompts;
+
+      expect(listedPrompts).toHaveLength(1);
+      expect(listedPrompts[0]?.name).toBe("code_review");
+      expect(listedPrompts[0]?.description).toBe("Requests a focused review of the supplied code.");
+      expect(listedPrompts[0]?.arguments).toEqual(
+        expect.arrayContaining([expect.objectContaining({ name: "code", required: true })]),
+      );
+
+      const retrieved = await client.request(3, "prompts/get", {
+        name: "code_review",
+        arguments: { code: "const x = 1;" },
+      });
+      const retrievedResult = retrieved.result as GetPromptResult;
+
+      expect(retrieved.error).toBeUndefined();
+      expect(retrievedResult.messages).toHaveLength(1);
+      expect(retrievedResult.messages[0]?.role).toBe("user");
+      expect(retrievedResult.messages[0]?.content).toEqual({
+        type: "text",
+        text: "Review the following code:\n\nconst x = 1;",
+      });
+
+      const missing = await client.request(4, "prompts/get", { name: "code_review", arguments: {} });
+      expect(missing.error).toBeDefined();
+      expect(missing.result).toBeUndefined();
+
+      const invalid = await client.request(5, "prompts/get", {
+        name: "code_review",
+        arguments: { code: 123 },
+      });
+      expect(invalid.error).toBeDefined();
+      expect(invalid.result).toBeUndefined();
+    } finally {
+      await client.close();
+    }
+
+    // Only the valid retrieval reached the handler; the SDK rejected both invalid calls.
+    expect(handlerSpy).toHaveBeenCalledTimes(1);
   });
 });
