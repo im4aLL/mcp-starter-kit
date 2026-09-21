@@ -61,7 +61,7 @@ Numeric order is the recommended implementation sequence and each task lists its
 | [06 Stdio lifecycle and diagnostics](06-stdio-lifecycle-and-diagnostics.md) | [ ] Not started | 05 | Signals close the transport predictably and all diagnostics remain on stderr |
 | [07 Verification, packaging, and starter documentation](07-verification-packaging-and-docs.md) | [ ] Not started | 06 | Clean install, checks, build, bin execution, Cursor, and Inspector workflows are verified and documented |
 | [08 Capability scaffold generator](08-capability-generator.md) | [x] Done | 07 | A local Node script generates a safe starter scaffold for a tool, resource, or prompt |
-| [09 List registered capabilities in the console](09-list-capabilities-script.md) | [ ] Not started | 08 | A local Node script prints registered tools, resources, and prompts in a console table |
+| [09 List registered capabilities in the console](09-list-capabilities-script.md) | [x] Done | 08 | A local Node script prints registered tools, resources, and prompts in a console table |
 
 ## Sequence rationale
 

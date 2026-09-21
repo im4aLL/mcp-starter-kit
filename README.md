@@ -96,6 +96,26 @@ Then add `SomethingTool` to the `tools` list that `getCapabilityTypes()` returns
 
 The `@tool`, `@resource`, and `@prompt` decorators already apply Inversify `injectable()` metadata, so do not add `@injectable()` to a capability class. Service classes that are not capabilities use `@injectable()` directly.
 
+## List registered capabilities
+
+`npm run list:capabilities` builds the project and prints every constructor returned by `getCapabilityTypes()` as a console table with its decorator metadata:
+
+```sh
+npm run list:capabilities
+```
+
+The table has stable `type`, `name`, `identifier`, and `description` columns. Rows are ordered by capability type (`tool`, `resource`, `prompt`) and then by name. A resource identifier is its URI; a tool or prompt identifier is its capability name.
+
+Listing reads `@tool`, `@resource`, and `@prompt` metadata directly. It never creates an Inversify container, resolves a dependency, invokes a capability constructor or handler, creates an `McpServer`, starts stdio, or loads `src/providers.ts`. It is metadata inspection only.
+
+The npm command always rebuilds first, so the table matches the current `src/` sources. To list without rebuilding when `dist/` is already fresh, run the script directly:
+
+```sh
+node scripts/list-capabilities.mjs
+```
+
+Missing capability metadata, a wrong decorator kind, multiple capability decorators on one class, duplicate identifiers, and a missing or stale build fail on stderr with a nonzero exit code and a recovery command instead of printing an incomplete table.
+
 ## Register services and lifetimes
 
 `src/providers.ts` is the application-owned composition point. Ordinary concrete services go in its `services` list and are self-bound with the container's default singleton scope, so one instance is shared by every capability within a server:

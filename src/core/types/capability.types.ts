@@ -18,6 +18,56 @@ export interface ICapabilities {
 }
 
 /**
+ * A listed tool constructor paired with its decorator metadata.
+ *
+ * This is the container-free, pre-resolution shape produced by
+ * `readCapabilityMetadata` and consumed by both runtime resolution and metadata
+ * listing.
+ */
+export interface IListedTool {
+  readonly metadata: IToolMetadata;
+  readonly toolConstructor: Newable<IMcpToolHandler>;
+}
+
+/**
+ * A listed prompt constructor paired with its decorator metadata.
+ */
+export interface IListedPrompt {
+  readonly metadata: IPromptMetadata;
+  readonly promptConstructor: Newable<IMcpPromptHandler>;
+}
+
+/**
+ * A listed resource constructor paired with its decorator metadata.
+ */
+export interface IListedResource {
+  readonly metadata: IResourceMetadata;
+  readonly resourceConstructor: Newable<IMcpResourceHandler>;
+}
+
+/**
+ * Validated, container-free capability metadata read from listed constructors.
+ */
+export interface IListedCapabilities {
+  readonly tools: readonly IListedTool[];
+  readonly prompts: readonly IListedPrompt[];
+  readonly resources: readonly IListedResource[];
+}
+
+/**
+ * One printable capability metadata row.
+ *
+ * `identifier` is the resource URI for resources and the capability name for
+ * tools and prompts.
+ */
+export interface ICapabilityMetadataRow {
+  readonly type: "tool" | "resource" | "prompt";
+  readonly name: string;
+  readonly identifier: string;
+  readonly description: string;
+}
+
+/**
  * A capability constructor paired with its decorator metadata.
  */
 export interface IResolvedTool {

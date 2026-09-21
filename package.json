@@ -9,7 +9,8 @@
   },
   "files": [
     "dist",
-    "docs"
+    "docs",
+    "scripts"
   ],
   "engines": {
     "node": ">=20"
@@ -23,7 +24,8 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "npm run typecheck && vitest run",
     "inspect": "npm run build && npx @modelcontextprotocol/inspector node dist/main.js",
-    "generate": "node scripts/generate.mjs"
+    "generate": "node scripts/generate.mjs",
+    "list:capabilities": "node scripts/list-capabilities.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.0.0",
