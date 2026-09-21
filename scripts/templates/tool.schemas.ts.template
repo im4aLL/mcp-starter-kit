@@ -1,0 +1,11 @@
+import { z } from "zod";
+
+// Tool input schema: placeholder string value. Transform-free so input equals output.
+export const {{className}}InputSchema = z.object({
+  value: z.string(),
+});
+
+// Tool output schema: object-shaped because structured tool output is an object.
+export const {{className}}OutputSchema = z.object({
+  result: z.string(),
+});

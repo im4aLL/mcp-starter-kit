@@ -1,0 +1,26 @@
+import { describe, expect, it } from "vitest";
+
+import { {{className}} } from "./{{fileBase}}";
+import { {{className}}ArgsSchema } from "./{{fileBase}}.schemas";
+
+describe("{{className}}ArgsSchema", () => {
+  it("accepts a topic string", () => {
+    expect({{className}}ArgsSchema.safeParse({ topic: "example" }).success).toBe(true);
+  });
+
+  it("rejects a missing topic", () => {
+    expect({{className}}ArgsSchema.safeParse({}).success).toBe(false);
+  });
+
+  it("rejects a non-string topic", () => {
+    expect({{className}}ArgsSchema.safeParse({ topic: 123 }).success).toBe(false);
+  });
+});
+
+describe("{{className}} handler", () => {
+  it("builds the instruction from the supplied topic", () => {
+    const generatedPrompt = new {{className}}();
+
+    expect(generatedPrompt.handler({ topic: "example" })).toBe("Describe the {{name}} prompt for:\n\nexample");
+  });
+});

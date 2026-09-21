@@ -1,9 +1,12 @@
-import { mkdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const SUPPORTED_KINDS = ["tool", "resource", "prompt", "service"];
 const NAME_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
+const SCRIPT_DIRECTORY = dirname(fileURLToPath(import.meta.url));
+const TEMPLATE_DIRECTORY = join(SCRIPT_DIRECTORY, "templates");
+const TOKEN_PATTERN = /\{\{(\w+)\}\}/g;
 
 /**
  * Throws when a scaffold kind is not supported.
@@ -17,31 +20,46 @@ function assertSupportedKind(kind) {
 }
 
 /**
- * Validates a scaffold kind and kebab-case base name.
+ * Validates a scaffold kind and kebab-case path.
+ *
+ * The path is one or more kebab-case segments separated by forward slashes.
+ * Intermediate segments become nested directories, so every segment must be
+ * a safe, well-formed kebab-case identifier.
  *
  * @param kind - Scaffold kind.
- * @param name - Kebab-case base name.
+ * @param name - Kebab-case path, optionally nested (for example nested/test).
  */
 function validateKindAndName(kind, name) {
   assertSupportedKind(kind);
 
-  if (name.includes("\0") || name.includes("/") || name.includes("\\") || name.includes("..") || name.includes(sep)) {
+  if (name.includes("\0") || name.includes("\\")) {
     throw new Error(
-      `Unsafe name "${name}". Use a kebab-case base name such as multiply, without path separators or parent segments.`,
+      `Unsafe name "${name}". Use a kebab-case path such as multiply or nested/test, without backslashes or parent segments.`,
     );
   }
 
-  if (!NAME_PATTERN.test(name)) {
+  const segments = name.split("/");
+  const baseName = segments.at(-1) ?? "";
+
+  if (segments.some((segment) => segment.length === 0 || segment === "." || segment === "..")) {
     throw new Error(
-      `Invalid name "${name}". Use a kebab-case base name such as multiply or project-info (lowercase letters, digits, and single hyphens).`,
+      `Unsafe name "${name}". Use a kebab-case path such as multiply or nested/test, without empty, current, or parent segments.`,
     );
   }
 
-  if (name.endsWith(`-${kind}`)) {
-    const baseName = name.slice(0, -(kind.length + 1));
+  for (const segment of segments) {
+    if (!NAME_PATTERN.test(segment)) {
+      throw new Error(
+        `Invalid name "${name}". Use a kebab-case path such as multiply or project-info/nested (lowercase letters, digits, and single hyphens per segment).`,
+      );
+    }
+  }
+
+  if (baseName.endsWith(`-${kind}`)) {
+    const trimmedBase = baseName.slice(0, -(kind.length + 1));
 
     throw new Error(
-      `Name "${name}" already ends with -${kind}. Use the kebab-case base name, for example ${baseName || "multiply"}.`,
+      `Name "${name}" already ends with -${kind}. Use the kebab-case base name, for example ${trimmedBase || "multiply"}.`,
     );
   }
 }
@@ -83,68 +101,136 @@ export function parseGenerateArgs(argv) {
 /**
  * Plans output paths and file contents for one scaffold.
  *
+ * File contents come from the template files under `scripts/templates`, so
+ * template changes do not require editing generation logic.
+ *
  * @param kind - Scaffold kind.
- * @param name - Kebab-case base name.
+ * @param name - Kebab-case path, optionally nested (for example nested/test).
  * @param cwd - Directory that contains `src/`.
  * @returns Relative paths, absolute paths, and file contents.
  */
-export function planScaffold(kind, name, cwd) {
+export async function planScaffold(kind, name, cwd) {
   validateKindAndName(kind, name);
 
-  const pascal = toPascalCase(name);
-  const mcpName = name.replaceAll("-", "_");
-  const title = toTitleCase(name);
-  const fileBase = `${name}-${kind}`;
-  const className = `${pascal}${toPascalCase(kind)}`;
+  const segments = name.split("/");
+  const baseName = segments.at(-1);
+  const nestedDirectory = segments.slice(0, -1).join("/");
+  const context = {
+    className: `${toPascalCase(baseName)}${toPascalCase(kind)}`,
+    fileBase: `${baseName}-${kind}`,
+    name: baseName,
+    mcpName: baseName.replaceAll("-", "_"),
+    title: toTitleCase(baseName),
+    coreImport: "",
+  };
 
   if (kind === "service") {
-    const relativePaths = [`src/services/${fileBase}.ts`, `src/services/${fileBase}.spec.ts`];
+    const relativeDirectory = nestedDirectory ? `src/services/${nestedDirectory}` : "src/services";
 
-    return {
-      kind,
-      name,
-      className,
-      files: [
-        {
-          relativePath: relativePaths[0],
-          absolutePath: resolve(cwd, relativePaths[0]),
-          contents: renderService(className, name),
-        },
-        {
-          relativePath: relativePaths[1],
-          absolutePath: resolve(cwd, relativePaths[1]),
-          contents: renderServiceSpec(className, fileBase, name),
-        },
-      ],
-    };
+    context.coreImport = toRelativeFromSrc(relativeDirectory);
+    const relativePaths = [
+      `${relativeDirectory}/${context.fileBase}.ts`,
+      `${relativeDirectory}/${context.fileBase}.spec.ts`,
+    ];
+
+    return buildPlan(kind, name, cwd, relativePaths, context, ["service.ts.template", "service.spec.ts.template"]);
   }
 
-  const directory = join("src", `${kind}s`, fileBase);
+  const relativeDirectory = nestedDirectory ? `src/${kind}s/${nestedDirectory}` : `src/${kind}s`;
+  const directory = `${relativeDirectory}/${context.fileBase}`;
+
+  context.coreImport = toRelativeFromSrc(directory);
   const relativePaths = [
-    join(directory, `${fileBase}.ts`),
-    join(directory, `${fileBase}.schemas.ts`),
-    join(directory, `${fileBase}.types.ts`),
-    join(directory, `${fileBase}.spec.ts`),
+    `${directory}/${context.fileBase}.ts`,
+    `${directory}/${context.fileBase}.schemas.ts`,
+    `${directory}/${context.fileBase}.types.ts`,
+    `${directory}/${context.fileBase}.spec.ts`,
   ];
-  const contents = capabilityContents(kind, className, fileBase, mcpName, name, title);
+  const templateNames = [
+    `${kind}.ts.template`,
+    `${kind}.schemas.ts.template`,
+    `${kind}.types.ts.template`,
+    `${kind}.spec.ts.template`,
+  ];
+
+  return buildPlan(kind, name, cwd, relativePaths, context, templateNames);
+}
+
+/**
+ * Builds the relative import path from a generated directory to `src/core`.
+ *
+ * @param relativeDirectory - POSIX directory relative to the project root, under `src/`.
+ * @returns Relative path such as `../../core` or `../../../core`.
+ */
+function toRelativeFromSrc(relativeDirectory) {
+  const depthBelowSrc = relativeDirectory.split("/").length - 1;
+
+  return `${"../".repeat(depthBelowSrc)}core`;
+}
+
+/**
+ * Assembles a scaffold plan by rendering each template to its output path.
+ *
+ * @param kind - Scaffold kind.
+ * @param name - Kebab-case path.
+ * @param cwd - Directory that contains `src/`.
+ * @param relativePaths - POSIX-relative output paths, aligned with templates.
+ * @param context - Placeholder values shared by every file.
+ * @param templateNames - Template file names under `scripts/templates`, aligned with paths.
+ * @returns Kind, name, class name, and planned files.
+ */
+async function buildPlan(kind, name, cwd, relativePaths, context, templateNames) {
+  const templates = await Promise.all(templateNames.map((templateName) => readTemplate(templateName)));
+  const files = relativePaths.map((relativePath, index) => ({
+    relativePath,
+    absolutePath: resolve(cwd, relativePath),
+    contents: render(templates[index], context),
+  }));
 
   return {
     kind,
     name,
-    className,
-    files: relativePaths.map((relativePath, index) => ({
-      relativePath: relativePath.split(sep).join("/"),
-      absolutePath: resolve(cwd, relativePath),
-      contents: contents[index],
-    })),
+    className: context.className,
+    files,
   };
+}
+
+/**
+ * Substitutes `{{token}}` placeholders in a template.
+ *
+ * @param template - Template text.
+ * @param context - Placeholder values.
+ * @returns Rendered text.
+ */
+function render(template, context) {
+  return template.replace(TOKEN_PATTERN, (match, token) =>
+    Object.hasOwn(context, token) ? String(context[token]) : match,
+  );
+}
+
+/**
+ * Reads one template file as UTF-8 and fails when it is absent.
+ *
+ * @param fileName - Template file name under `scripts/templates`.
+ * @returns Template text.
+ */
+async function readTemplate(fileName) {
+  try {
+    return await readFile(join(TEMPLATE_DIRECTORY, fileName), "utf8");
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+      throw new Error(`Missing template file scripts/templates/${fileName}.`);
+    }
+
+    throw error;
+  }
 }
 
 /**
  * Generates one capability or service scaffold without overwriting files.
  *
  * @param kind - Scaffold kind.
- * @param name - Kebab-case base name.
+ * @param name - Kebab-case path, optionally nested (for example nested/test).
  * @param options - Working directory and optional filesystem overrides.
  * @returns Relative paths that were written.
  */
@@ -156,7 +242,7 @@ export async function generateScaffold(kind, name, options = {}) {
     stat: options.io?.stat ?? stat,
     writeFile: options.io?.writeFile ?? writeFile,
   };
-  const plan = planScaffold(kind, name, cwd);
+  const plan = await planScaffold(kind, name, cwd);
 
   assertSafePaths(cwd, plan.files);
   await assertTargetsAreFree(plan.files, io);
@@ -206,44 +292,6 @@ function toTitleCase(value) {
     .split("-")
     .map((part) => `${part[0].toUpperCase()}${part.slice(1)}`)
     .join(" ");
-}
-
-/**
- * Returns the four capability file contents in path order.
- *
- * @param kind - Capability kind.
- * @param className - PascalCase class name.
- * @param fileBase - File base name including the kind suffix.
- * @param mcpName - MCP identifier.
- * @param name - Kebab-case base name.
- * @param title - Title-case label.
- * @returns Class, schema, type, and spec file contents.
- */
-function capabilityContents(kind, className, fileBase, mcpName, name, title) {
-  if (kind === "tool") {
-    return [
-      renderTool(className, fileBase, mcpName, name),
-      renderToolSchemas(className),
-      renderToolTypes(className, fileBase),
-      renderToolSpec(className, fileBase),
-    ];
-  }
-
-  if (kind === "resource") {
-    return [
-      renderResource(className, fileBase, name, title),
-      renderResourceSchemas(className),
-      renderResourceTypes(className, fileBase),
-      renderResourceSpec(className, fileBase, name),
-    ];
-  }
-
-  return [
-    renderPrompt(className, fileBase, mcpName, name),
-    renderPromptSchemas(className),
-    renderPromptTypes(className, fileBase),
-    renderPromptSpec(className, fileBase, name),
-  ];
 }
 
 /**
@@ -360,387 +408,6 @@ async function exists(path, io) {
 
     throw error;
   }
-}
-
-/**
- * Renders a tool class file.
- *
- * @param className - PascalCase tool class name.
- * @param fileBase - File base name including the kind suffix.
- * @param mcpName - MCP tool name.
- * @param name - Kebab-case base name.
- * @returns File contents.
- */
-function renderTool(className, fileBase, mcpName, name) {
-  return `import { tool } from "../../core/decorators";
-import type { IMcpToolHandler } from "../../core/types";
-import { ${className}InputSchema, ${className}OutputSchema } from "./${fileBase}.schemas";
-import type { ${className}InputType, ${className}OutputType } from "./${fileBase}.types";
-
-/**
- * Handles ${name} tool requests.
- */
-@tool({
-  name: "${mcpName}",
-  description: "Describe the ${name} tool.",
-  inputSchema: ${className}InputSchema,
-  outputSchema: ${className}OutputSchema,
-})
-export class ${className} implements IMcpToolHandler {
-  /**
-   * Handles a validated ${name} request.
-   *
-   * @param input - Validated tool input.
-   * @returns The tool result.
-   */
-  public handler(input: ${className}InputType): ${className}OutputType {
-    return {
-      result: input.value,
-    };
-  }
-}
-`;
-}
-
-/**
- * Renders tool schemas.
- *
- * @param className - PascalCase tool class name.
- * @returns File contents.
- */
-function renderToolSchemas(className) {
-  return `import { z } from "zod";
-
-// Tool input schema: placeholder string value. Transform-free so input equals output.
-export const ${className}InputSchema = z.object({
-  value: z.string(),
-});
-
-// Tool output schema: object-shaped because structured tool output is an object.
-export const ${className}OutputSchema = z.object({
-  result: z.string(),
-});
-`;
-}
-
-/**
- * Renders tool types.
- *
- * @param className - PascalCase tool class name.
- * @param fileBase - File base name including the kind suffix.
- * @returns File contents.
- */
-function renderToolTypes(className, fileBase) {
-  return `import type { z } from "zod";
-
-import type { ${className}InputSchema, ${className}OutputSchema } from "./${fileBase}.schemas";
-
-// Schema-derived tool input type.
-export type ${className}InputType = z.output<typeof ${className}InputSchema>;
-
-// Schema-derived tool output type.
-export type ${className}OutputType = z.output<typeof ${className}OutputSchema>;
-`;
-}
-
-/**
- * Renders a tool spec.
- *
- * @param className - PascalCase tool class name.
- * @param fileBase - File base name including the kind suffix.
- * @returns File contents.
- */
-function renderToolSpec(className, fileBase) {
-  return `import { describe, expect, it } from "vitest";
-
-import { ${className} } from "./${fileBase}";
-import { ${className}InputSchema, ${className}OutputSchema } from "./${fileBase}.schemas";
-
-describe("${className} schemas", () => {
-  it("accepts a string value", () => {
-    expect(${className}InputSchema.safeParse({ value: "ok" }).success).toBe(true);
-  });
-
-  it("rejects a missing value", () => {
-    expect(${className}InputSchema.safeParse({}).success).toBe(false);
-  });
-
-  it("produces object-shaped output", () => {
-    expect(${className}OutputSchema.safeParse({ result: "ok" }).success).toBe(true);
-    expect(${className}OutputSchema.safeParse("ok").success).toBe(false);
-  });
-});
-
-describe("${className} handler", () => {
-  it("echoes the validated value", () => {
-    const tool = new ${className}();
-
-    expect(tool.handler({ value: "ok" })).toEqual({ result: "ok" });
-  });
-});
-`;
-}
-
-/**
- * Renders a resource class file.
- *
- * @param className - PascalCase resource class name.
- * @param fileBase - File base name including the kind suffix.
- * @param name - Kebab-case base name.
- * @param title - Title-case label.
- * @returns File contents.
- */
-function renderResource(className, fileBase, name, title) {
-  return `import { resource } from "../../core/decorators";
-import type { IMcpResourceHandler } from "../../core/types";
-import type { ${className}Type } from "./${fileBase}.types";
-
-/**
- * Provides ${name} resource content.
- */
-@resource({
-  uri: "${name}://info",
-  name: "${title}",
-  description: "Describe the ${name} resource.",
-  mimeType: "text/plain",
-})
-export class ${className} implements IMcpResourceHandler {
-  /**
-   * Returns ${name} content.
-   *
-   * @param _uri - URI requested by the MCP client.
-   * @returns The plain-text resource body.
-   */
-  public handler(_uri: string): ${className}Type {
-    return "Describe the ${name} resource.";
-  }
-}
-`;
-}
-
-/**
- * Renders resource schemas.
- *
- * @param className - PascalCase resource class name.
- * @returns File contents.
- */
-function renderResourceSchemas(className) {
-  return `import { z } from "zod";
-
-// Resource domain result schema: a plain-text placeholder body.
-export const ${className}Schema = z.string();
-`;
-}
-
-/**
- * Renders resource types.
- *
- * @param className - PascalCase resource class name.
- * @param fileBase - File base name including the kind suffix.
- * @returns File contents.
- */
-function renderResourceTypes(className, fileBase) {
-  return `import type { z } from "zod";
-
-import type { ${className}Schema } from "./${fileBase}.schemas";
-
-// Schema-derived resource domain result type.
-export type ${className}Type = z.output<typeof ${className}Schema>;
-`;
-}
-
-/**
- * Renders a resource spec.
- *
- * @param className - PascalCase resource class name.
- * @param fileBase - File base name including the kind suffix.
- * @param name - Kebab-case base name.
- * @returns File contents.
- */
-function renderResourceSpec(className, fileBase, name) {
-  return `import { describe, expect, it } from "vitest";
-
-import { ${className} } from "./${fileBase}";
-import { ${className}Schema } from "./${fileBase}.schemas";
-
-describe("${className} schemas", () => {
-  it("accepts a plain-text body", () => {
-    expect(${className}Schema.safeParse("Describe the ${name} resource.").success).toBe(true);
-  });
-
-  it("rejects non-string values", () => {
-    expect(${className}Schema.safeParse(1).success).toBe(false);
-    expect(${className}Schema.safeParse({ text: "no" }).success).toBe(false);
-  });
-});
-
-describe("${className} handler", () => {
-  it("returns the placeholder body unchanged", () => {
-    const resource = new ${className}();
-
-    expect(resource.handler("${name}://info")).toBe("Describe the ${name} resource.");
-  });
-});
-`;
-}
-
-/**
- * Renders a prompt class file.
- *
- * @param className - PascalCase prompt class name.
- * @param fileBase - File base name including the kind suffix.
- * @param mcpName - MCP prompt name.
- * @param name - Kebab-case base name.
- * @returns File contents.
- */
-function renderPrompt(className, fileBase, mcpName, name) {
-  return `import { prompt } from "../../core/decorators";
-import type { IMcpPromptHandler } from "../../core/types";
-import { ${className}ArgsSchema } from "./${fileBase}.schemas";
-import type { ${className}ArgsType } from "./${fileBase}.types";
-
-/**
- * Builds a ${name} prompt.
- */
-@prompt({
-  name: "${mcpName}",
-  description: "Describe the ${name} prompt.",
-  argsSchema: ${className}ArgsSchema,
-  role: "user",
-})
-export class ${className} implements IMcpPromptHandler {
-  /**
-   * Builds the ${name} instruction.
-   *
-   * @param args - Validated prompt arguments.
-   * @returns The prompt text.
-   */
-  public handler(args: ${className}ArgsType): string {
-    return \`Describe the ${name} prompt for:\\n\\n\${args.topic}\`;
-  }
-}
-`;
-}
-
-/**
- * Renders prompt schemas.
- *
- * @param className - PascalCase prompt class name.
- * @returns File contents.
- */
-function renderPromptSchemas(className) {
-  return `import { z } from "zod";
-
-// Prompt argument schema: a required topic string. Transform-free so input equals output.
-export const ${className}ArgsSchema = z.object({
-  topic: z.string(),
-});
-`;
-}
-
-/**
- * Renders prompt types.
- *
- * @param className - PascalCase prompt class name.
- * @param fileBase - File base name including the kind suffix.
- * @returns File contents.
- */
-function renderPromptTypes(className, fileBase) {
-  return `import type { z } from "zod";
-
-import type { ${className}ArgsSchema } from "./${fileBase}.schemas";
-
-// Schema-derived prompt argument type.
-export type ${className}ArgsType = z.output<typeof ${className}ArgsSchema>;
-`;
-}
-
-/**
- * Renders a prompt spec.
- *
- * @param className - PascalCase prompt class name.
- * @param fileBase - File base name including the kind suffix.
- * @param name - Kebab-case base name.
- * @returns File contents.
- */
-function renderPromptSpec(className, fileBase, name) {
-  return `import { describe, expect, it } from "vitest";
-
-import { ${className} } from "./${fileBase}";
-import { ${className}ArgsSchema } from "./${fileBase}.schemas";
-
-describe("${className}ArgsSchema", () => {
-  it("accepts a topic string", () => {
-    expect(${className}ArgsSchema.safeParse({ topic: "example" }).success).toBe(true);
-  });
-
-  it("rejects a missing topic", () => {
-    expect(${className}ArgsSchema.safeParse({}).success).toBe(false);
-  });
-
-  it("rejects a non-string topic", () => {
-    expect(${className}ArgsSchema.safeParse({ topic: 123 }).success).toBe(false);
-  });
-});
-
-describe("${className} handler", () => {
-  it("builds the instruction from the supplied topic", () => {
-    const generatedPrompt = new ${className}();
-
-    expect(generatedPrompt.handler({ topic: "example" })).toBe("Describe the ${name} prompt for:\\n\\nexample");
-  });
-});
-`;
-}
-
-/**
- * Renders an injectable service class.
- *
- * @param className - PascalCase service class name.
- * @param name - Kebab-case base name.
- * @returns File contents.
- */
-function renderService(className, name) {
-  return `import { injectable } from "inversify";
-
-/**
- * Placeholder ${name} service.
- */
-@injectable()
-export class ${className} {
-  /**
-   * Returns a placeholder value.
-   *
-   * @returns The placeholder string.
-   */
-  public getValue(): string {
-    return "${name}";
-  }
-}
-`;
-}
-
-/**
- * Renders a service spec.
- *
- * @param className - PascalCase service class name.
- * @param fileBase - File base name including the kind suffix.
- * @param name - Kebab-case base name.
- * @returns File contents.
- */
-function renderServiceSpec(className, fileBase, name) {
-  return `import { describe, expect, it } from "vitest";
-
-import { ${className} } from "./${fileBase}";
-
-describe("${className}", () => {
-  it("returns the placeholder value", () => {
-    const service = new ${className}();
-
-    expect(service.getValue()).toBe("${name}");
-  });
-});
-`;
 }
 
 /**

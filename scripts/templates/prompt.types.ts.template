@@ -1,0 +1,6 @@
+import type { z } from "zod";
+
+import type { {{className}}ArgsSchema } from "./{{fileBase}}.schemas";
+
+// Schema-derived prompt argument type.
+export type {{className}}ArgsType = z.output<typeof {{className}}ArgsSchema>;

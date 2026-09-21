@@ -1,0 +1,23 @@
+import { describe, expect, it } from "vitest";
+
+import { {{className}} } from "./{{fileBase}}";
+import { {{className}}Schema } from "./{{fileBase}}.schemas";
+
+describe("{{className}} schemas", () => {
+  it("accepts a plain-text body", () => {
+    expect({{className}}Schema.safeParse("Describe the {{name}} resource.").success).toBe(true);
+  });
+
+  it("rejects non-string values", () => {
+    expect({{className}}Schema.safeParse(1).success).toBe(false);
+    expect({{className}}Schema.safeParse({ text: "no" }).success).toBe(false);
+  });
+});
+
+describe("{{className}} handler", () => {
+  it("returns the placeholder body unchanged", () => {
+    const resource = new {{className}}();
+
+    expect(resource.handler("{{name}}://info")).toBe("Describe the {{name}} resource.");
+  });
+});

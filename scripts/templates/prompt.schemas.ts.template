@@ -1,0 +1,6 @@
+import { z } from "zod";
+
+// Prompt argument schema: a required topic string. Transform-free so input equals output.
+export const {{className}}ArgsSchema = z.object({
+  topic: z.string(),
+});

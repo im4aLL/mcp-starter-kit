@@ -67,7 +67,9 @@ A generated service uses Inversify's `@injectable()` directly because it is an o
 - [x] Refuse to overwrite any existing file. Validate the entire target set before writing so a failed generation does not leave a partial scaffold.
 - [x] Generate only the requested scaffold. Do not read or modify `src/capabilities/capabilities.ts`, `src/providers.ts`, or container bindings; the developer will import a generated capability, add its constructor to `getCapabilityTypes()`, and add any required service providers manually, or list a generated service in `src/providers.ts`.
 - [x] Keep the script dependency-free unless the implementation proves a parser or template dependency is necessary.
-- [x] Add focused tests that run generation in a temporary fixture for all three capability kinds and for services, and cover invalid input, collisions, and partial-write prevention.
+- [x] Read each kind's file contents from template files under `scripts/templates/` instead of inline string builders, so a convention change is a template edit rather than a generator change.
+- [x] Accept a slash-separated kebab-case path (for example `nested/test`). Earlier segments become nested directories and the last segment is the base name; imports to `src/core` are depth-adjusted for nested capabilities.
+- [x] Add focused tests that run generation in a temporary fixture for all three capability kinds and for services, and cover invalid input, collisions, partial-write prevention, and nested paths.
 - [x] Document the generator command and note that explicit constructor registration in `getCapabilityTypes()` plus any required service registration in `src/providers.ts` remains a manual step in the root README.
 
 ## Acceptance criteria

@@ -48,6 +48,17 @@ Naming appends the kind suffix to a kebab-case base name:
 | `npm run generate prompt greet` | `src/prompts/greet-prompt/` with the same four-file layout |
 | `npm run generate service inventory` | `src/services/inventory-service.ts` and `src/services/inventory-service.spec.ts` |
 
+Pass a slash-separated kebab-case path to nest the scaffold in subdirectories. The last segment is the base name; earlier segments become folders:
+
+| Command | Files |
+| --- | --- |
+| `npm run generate tool nested/multiply` | `src/tools/nested/multiply-tool/` with the four-file layout |
+| `npm run generate resource github/status` | `src/resources/github/status-resource/` with the four-file layout |
+| `npm run generate prompt code/review` | `src/prompts/code/review-prompt/` with the four-file layout |
+| `npm run generate service billing/invoice` | `src/services/billing/invoice-service.ts` and `src/services/billing/invoice-service.spec.ts` |
+
+Each kind's file contents come from the templates under `scripts/templates/` (`tool.ts.template`, `tool.schemas.ts.template`, and so on). Update those files when a capability convention changes; `scripts/generate.mjs` only handles argument validation, path planning, and safe writes.
+
 Generated capability class, schema, and type names append the kind suffix (for example `StatusResourceSchema`), a uniform rule that differs from the legacy `project-info` and `code-review` sample folders, whose names omit the suffix.
 
 After generating a capability, import the class and add its constructor to `getCapabilityTypes()` in `src/capabilities/capabilities.ts`. After generating a service, add it to the `services` list in `src/providers.ts` if a capability should inject it. The generator does not perform those steps.

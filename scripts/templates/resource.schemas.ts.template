@@ -1,0 +1,4 @@
+import { z } from "zod";
+
+// Resource domain result schema: a plain-text placeholder body.
+export const {{className}}Schema = z.string();

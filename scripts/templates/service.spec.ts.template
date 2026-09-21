@@ -1,0 +1,11 @@
+import { describe, expect, it } from "vitest";
+
+import { {{className}} } from "./{{fileBase}}";
+
+describe("{{className}}", () => {
+  it("returns the placeholder value", () => {
+    const service = new {{className}}();
+
+    expect(service.getValue()).toBe("{{name}}");
+  });
+});

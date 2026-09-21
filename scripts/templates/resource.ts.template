@@ -1,0 +1,24 @@
+import { resource } from "{{coreImport}}/decorators";
+import type { IMcpResourceHandler } from "{{coreImport}}/types";
+import type { {{className}}Type } from "./{{fileBase}}.types";
+
+/**
+ * Provides {{name}} resource content.
+ */
+@resource({
+  uri: "{{name}}://info",
+  name: "{{title}}",
+  description: "Describe the {{name}} resource.",
+  mimeType: "text/plain",
+})
+export class {{className}} implements IMcpResourceHandler {
+  /**
+   * Returns {{name}} content.
+   *
+   * @param _uri - URI requested by the MCP client.
+   * @returns The plain-text resource body.
+   */
+  public handler(_uri: string): {{className}}Type {
+    return "Describe the {{name}} resource.";
+  }
+}

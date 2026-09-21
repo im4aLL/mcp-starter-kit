@@ -1,0 +1,9 @@
+import type { z } from "zod";
+
+import type { {{className}}InputSchema, {{className}}OutputSchema } from "./{{fileBase}}.schemas";
+
+// Schema-derived tool input type.
+export type {{className}}InputType = z.output<typeof {{className}}InputSchema>;
+
+// Schema-derived tool output type.
+export type {{className}}OutputType = z.output<typeof {{className}}OutputSchema>;

@@ -1,0 +1,25 @@
+import { prompt } from "{{coreImport}}/decorators";
+import type { IMcpPromptHandler } from "{{coreImport}}/types";
+import { {{className}}ArgsSchema } from "./{{fileBase}}.schemas";
+import type { {{className}}ArgsType } from "./{{fileBase}}.types";
+
+/**
+ * Builds a {{name}} prompt.
+ */
+@prompt({
+  name: "{{mcpName}}",
+  description: "Describe the {{name}} prompt.",
+  argsSchema: {{className}}ArgsSchema,
+  role: "user",
+})
+export class {{className}} implements IMcpPromptHandler {
+  /**
+   * Builds the {{name}} instruction.
+   *
+   * @param args - Validated prompt arguments.
+   * @returns The prompt text.
+   */
+  public handler(args: {{className}}ArgsType): string {
+    return `Describe the {{name}} prompt for:\n\n${args.topic}`;
+  }
+}

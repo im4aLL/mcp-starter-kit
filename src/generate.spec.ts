@@ -103,6 +103,40 @@ describe("generate script", () => {
     expect(existsSync(join(fixture, "src/providers.ts"))).toBe(false);
   });
 
+  it("creates a nested service scaffold inside nested directories", () => {
+    const fixture = createFixture();
+    const result = runGenerate(fixture, ["service", "nested/test"]);
+
+    expect(result.status).toBe(0);
+    expect(listRelativeFiles(fixture)).toEqual([
+      "src/services/nested/test-service.spec.ts",
+      "src/services/nested/test-service.ts",
+    ]);
+
+    const serviceSource = readFileSync(join(fixture, "src/services/nested/test-service.ts"), "utf8");
+
+    expect(serviceSource).toContain("@injectable()");
+    expect(serviceSource).toContain("export class TestService");
+  });
+
+  it("creates a nested capability scaffold inside nested directories", () => {
+    const fixture = createFixture();
+    const result = runGenerate(fixture, ["tool", "nested/multiply"]);
+
+    expect(result.status).toBe(0);
+    expect(listRelativeFiles(fixture)).toEqual([
+      "src/tools/nested/multiply-tool/multiply-tool.schemas.ts",
+      "src/tools/nested/multiply-tool/multiply-tool.spec.ts",
+      "src/tools/nested/multiply-tool/multiply-tool.ts",
+      "src/tools/nested/multiply-tool/multiply-tool.types.ts",
+    ]);
+
+    const toolSource = readFileSync(join(fixture, "src/tools/nested/multiply-tool/multiply-tool.ts"), "utf8");
+
+    expect(toolSource).toContain("export class MultiplyTool implements IMcpToolHandler");
+    expect(toolSource).toContain('name: "multiply"');
+  });
+
   it("does not modify constructor registration or provider configuration files", () => {
     const fixture = createFixture();
     const capabilitiesPath = join(fixture, "src/capabilities/capabilities.ts");
@@ -172,6 +206,8 @@ describe("generate script", () => {
     expect(runGenerate(fixture, ["tool", "Multiply"]).stderr).toContain("Invalid name");
     expect(runGenerate(fixture, ["tool", "multiply_tool"]).stderr).toContain("Invalid name");
     expect(runGenerate(fixture, ["tool", "../secret"]).stderr).toContain("Unsafe name");
+    expect(runGenerate(fixture, ["tool", "nested//test"]).stderr).toContain("Unsafe name");
+    expect(runGenerate(fixture, ["tool", "nested/Multiply"]).stderr).toContain("Invalid name");
     expect(runGenerate(fixture, ["tool", "multiply-tool"]).stderr).toContain("already ends with -tool");
     expect(listRelativeFiles(fixture)).toEqual([]);
   });

@@ -1,0 +1,16 @@
+import { injectable } from "inversify";
+
+/**
+ * Placeholder {{name}} service.
+ */
+@injectable()
+export class {{className}} {
+  /**
+   * Returns a placeholder value.
+   *
+   * @returns The placeholder string.
+   */
+  public getValue(): string {
+    return "{{name}}";
+  }
+}

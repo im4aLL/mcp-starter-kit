@@ -1,0 +1,6 @@
+import type { z } from "zod";
+
+import type { {{className}}Schema } from "./{{fileBase}}.schemas";
+
+// Schema-derived resource domain result type.
+export type {{className}}Type = z.output<typeof {{className}}Schema>;

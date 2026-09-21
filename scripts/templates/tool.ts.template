@@ -1,0 +1,27 @@
+import { tool } from "{{coreImport}}/decorators";
+import type { IMcpToolHandler } from "{{coreImport}}/types";
+import { {{className}}InputSchema, {{className}}OutputSchema } from "./{{fileBase}}.schemas";
+import type { {{className}}InputType, {{className}}OutputType } from "./{{fileBase}}.types";
+
+/**
+ * Handles {{name}} tool requests.
+ */
+@tool({
+  name: "{{mcpName}}",
+  description: "Describe the {{name}} tool.",
+  inputSchema: {{className}}InputSchema,
+  outputSchema: {{className}}OutputSchema,
+})
+export class {{className}} implements IMcpToolHandler {
+  /**
+   * Handles a validated {{name}} request.
+   *
+   * @param input - Validated tool input.
+   * @returns The tool result.
+   */
+  public handler(input: {{className}}InputType): {{className}}OutputType {
+    return {
+      result: input.value,
+    };
+  }
+}

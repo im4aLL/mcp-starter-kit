@@ -1,0 +1,27 @@
+import { describe, expect, it } from "vitest";
+
+import { {{className}} } from "./{{fileBase}}";
+import { {{className}}InputSchema, {{className}}OutputSchema } from "./{{fileBase}}.schemas";
+
+describe("{{className}} schemas", () => {
+  it("accepts a string value", () => {
+    expect({{className}}InputSchema.safeParse({ value: "ok" }).success).toBe(true);
+  });
+
+  it("rejects a missing value", () => {
+    expect({{className}}InputSchema.safeParse({}).success).toBe(false);
+  });
+
+  it("produces object-shaped output", () => {
+    expect({{className}}OutputSchema.safeParse({ result: "ok" }).success).toBe(true);
+    expect({{className}}OutputSchema.safeParse("ok").success).toBe(false);
+  });
+});
+
+describe("{{className}} handler", () => {
+  it("echoes the validated value", () => {
+    const tool = new {{className}}();
+
+    expect(tool.handler({ value: "ok" })).toEqual({ result: "ok" });
+  });
+});
