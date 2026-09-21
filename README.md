@@ -28,6 +28,30 @@ npm start
 
 `npm start` runs `node dist/main.js`, the bundled ESM entry with a Node shebang. `npm run dev` runs the TypeScript directly through tsx. `npm run inspect` builds and launches the MCP Inspector.
 
+## Generate a scaffold
+
+`npm run generate` writes a convention-compliant starter class. It never overwrites files, never registers constructors, and never edits `src/capabilities/capabilities.ts` or `src/providers.ts`.
+
+```sh
+npm run generate tool multiply
+npm run generate resource status
+npm run generate prompt greet
+npm run generate service inventory
+```
+
+Naming appends the kind suffix to a kebab-case base name:
+
+| Command | Files |
+| --- | --- |
+| `npm run generate tool multiply` | `src/tools/multiply-tool/` with `multiply-tool.ts`, `multiply-tool.schemas.ts`, `multiply-tool.types.ts`, and `multiply-tool.spec.ts` |
+| `npm run generate resource status` | `src/resources/status-resource/` with the same four-file layout |
+| `npm run generate prompt greet` | `src/prompts/greet-prompt/` with the same four-file layout |
+| `npm run generate service inventory` | `src/services/inventory-service.ts` and `src/services/inventory-service.spec.ts` |
+
+Generated capability class, schema, and type names append the kind suffix (for example `StatusResourceSchema`), a uniform rule that differs from the legacy `project-info` and `code-review` sample folders, whose names omit the suffix.
+
+After generating a capability, import the class and add its constructor to `getCapabilityTypes()` in `src/capabilities/capabilities.ts`. After generating a service, add it to the `services` list in `src/providers.ts` if a capability should inject it. The generator does not perform those steps.
+
 ## Add a capability
 
 Put MCP metadata and Inversify injectable metadata on a class with one project decorator, then list the constructor. There is no hidden registry and no source scan: `getCapabilityTypes()` is the only registration list.
@@ -35,7 +59,7 @@ Put MCP metadata and Inversify injectable metadata on a class with one project d
 ```ts
 import { tool } from "../../core/decorators";
 import type { IMcpToolHandler } from "../../core/types";
-import { SomethingInputType, SomethingOutputType } from "./something.types";
+import type { SomethingInputType, SomethingOutputType } from "./something.types";
 import { SomethingInputSchema, SomethingOutputSchema } from "./something.schemas";
 
 @tool({

@@ -22,7 +22,8 @@
     "format": "biome format --write .",
     "typecheck": "tsc -p tsconfig.json",
     "test": "npm run typecheck && vitest run",
-    "inspect": "npm run build && npx @modelcontextprotocol/inspector node dist/main.js"
+    "inspect": "npm run build && npx @modelcontextprotocol/inspector node dist/main.js",
+    "generate": "node scripts/generate.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.0.0",
