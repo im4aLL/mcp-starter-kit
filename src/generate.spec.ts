@@ -137,6 +137,61 @@ describe("generate script", () => {
     expect(toolSource).toContain('name: "multiply"');
   });
 
+  it("previews a scaffold without writing files when --dry-run is passed", () => {
+    const fixture = createFixture();
+    const result = runGenerate(fixture, ["tool", "multiply", "--dry-run"]);
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toContain("Would create:");
+    expect(result.stdout).toContain("src/tools/multiply-tool/multiply-tool.ts");
+    expect(result.stdout).not.toContain("Created:");
+    expect(listRelativeFiles(fixture)).toEqual([]);
+  });
+
+  it("honors npm_config_dry_run when npm consumes the flag", () => {
+    const fixture = createFixture();
+    const result = runGenerateWithEnv(fixture, ["tool", "multiply"], { npm_config_dry_run: "true" });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("Would create:");
+    expect(result.stdout).not.toContain("Created:");
+    expect(listRelativeFiles(fixture)).toEqual([]);
+  });
+
+  it("accepts --dry-run before the positional arguments", () => {
+    const fixture = createFixture();
+    const result = runGenerate(fixture, ["--dry-run", "service", "inventory"]);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("Would create:");
+    expect(result.stdout).toContain("src/services/inventory-service.ts");
+    expect(listRelativeFiles(fixture)).toEqual([]);
+  });
+
+  it("still reports collisions on a dry run", () => {
+    const fixture = createFixture();
+    const existingPath = join(fixture, "src/tools/multiply-tool/multiply-tool.ts");
+
+    mkdirSync(dirname(existingPath), { recursive: true });
+    writeFileSync(existingPath, "export const existing = true;\n");
+
+    const result = runGenerate(fixture, ["tool", "multiply", "--dry-run"]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("Refusing to overwrite existing file");
+    expect(readFileSync(existingPath, "utf8")).toBe("export const existing = true;\n");
+  });
+
+  it("rejects unknown options", () => {
+    const fixture = createFixture();
+    const result = runGenerate(fixture, ["tool", "multiply", "--force"]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('Unknown option "--force"');
+    expect(listRelativeFiles(fixture)).toEqual([]);
+  });
+
   it("does not modify constructor registration or provider configuration files", () => {
     const fixture = createFixture();
     const capabilitiesPath = join(fixture, "src/capabilities/capabilities.ts");
@@ -246,6 +301,32 @@ function runGenerate(cwd: string, args: string[]): { status: number | null; stdo
   const result = spawnSync(process.execPath, [generateScript, ...args], {
     cwd,
     encoding: "utf8",
+  });
+
+  return {
+    status: result.status,
+    stdout: result.stdout,
+    stderr: result.stderr,
+  };
+}
+
+/**
+ * Runs the public generate CLI with extra environment variables.
+ *
+ * @param cwd - Generation root.
+ * @param args - Kind and name arguments.
+ * @param env - Additional environment variables to set.
+ * @returns Process status and stdio text.
+ */
+function runGenerateWithEnv(
+  cwd: string,
+  args: string[],
+  env: Record<string, string>,
+): { status: number | null; stdout: string; stderr: string } {
+  const result = spawnSync(process.execPath, [generateScript, ...args], {
+    cwd,
+    encoding: "utf8",
+    env: { ...process.env, ...env },
   });
 
   return {

@@ -39,6 +39,12 @@ npm run generate prompt greet
 npm run generate service inventory
 ```
 
+Pass `--dry-run` to preview the files and collision checks without writing anything:
+
+```sh
+npm run generate tool multiply --dry-run
+```
+
 Naming appends the kind suffix to a kebab-case base name:
 
 | Command | Files |

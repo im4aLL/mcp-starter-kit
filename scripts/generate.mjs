@@ -65,37 +65,65 @@ function validateKindAndName(kind, name) {
 }
 
 /**
+ * Splits CLI arguments into flags and positional values.
+ *
+ * @param argv - Arguments after the script path.
+ * @returns Positional values and parsed flags.
+ */
+function parseGenerateFlags(argv) {
+  let dryRun = false;
+  const positionals = [];
+
+  for (const argument of argv) {
+    if (argument === "--dry-run") {
+      dryRun = true;
+      continue;
+    }
+
+    if (argument.startsWith("-")) {
+      throw new Error(`Unknown option "${argument}". Use --dry-run to preview without writing files.`);
+    }
+
+    positionals.push(argument);
+  }
+
+  return { positionals, dryRun };
+}
+
+/**
  * Parses CLI arguments for the scaffold generator.
  *
  * @param argv - Arguments after the script path.
- * @returns The requested kind and kebab-case base name.
+ * @returns The requested kind, kebab-case base name, and dry-run flag.
  */
 export function parseGenerateArgs(argv) {
-  if (argv.length === 0) {
+  const { positionals, dryRun } = parseGenerateFlags(argv);
+
+  if (positionals.length === 0) {
     throw new Error(
       "Missing kind and name. Use npm run generate <tool|resource|prompt|service> <name>, for example npm run generate tool multiply.",
     );
   }
 
-  if (argv.length === 1) {
-    assertSupportedKind(argv[0]);
+  if (positionals.length === 1) {
+    assertSupportedKind(positionals[0]);
 
     throw new Error(
-      `Missing name. Use npm run generate ${argv[0]} <name>, for example npm run generate ${argv[0]} multiply.`,
+      `Missing name. Use npm run generate ${positionals[0]} <name>, for example npm run generate ${positionals[0]} multiply.`,
     );
   }
 
-  if (argv.length > 2) {
+  if (positionals.length > 2) {
     throw new Error(
-      `Unexpected extra arguments: ${argv.slice(2).join(" ")}. Use npm run generate <tool|resource|prompt|service> <name>.`,
+      `Unexpected extra arguments: ${positionals.slice(2).join(" ")}. Use npm run generate <tool|resource|prompt|service> <name>.`,
     );
   }
 
-  const [kind, name] = argv;
+  const [kind, name] = positionals;
 
   validateKindAndName(kind, name);
 
-  return { kind, name };
+  return { kind, name, dryRun };
 }
 
 /**
@@ -231,11 +259,12 @@ async function readTemplate(fileName) {
  *
  * @param kind - Scaffold kind.
  * @param name - Kebab-case path, optionally nested (for example nested/test).
- * @param options - Working directory and optional filesystem overrides.
- * @returns Relative paths that were written.
+ * @param options - Working directory, dry-run switch, and optional filesystem overrides.
+ * @returns Relative paths that were written, or would be written on a dry run.
  */
 export async function generateScaffold(kind, name, options = {}) {
   const cwd = resolve(options.cwd ?? process.cwd());
+  const dryRun = options.dryRun ?? false;
   const io = {
     mkdir: options.io?.mkdir ?? mkdir,
     rm: options.io?.rm ?? rm,
@@ -246,6 +275,10 @@ export async function generateScaffold(kind, name, options = {}) {
 
   assertSafePaths(cwd, plan.files);
   await assertTargetsAreFree(plan.files, io);
+
+  if (dryRun) {
+    return plan.files.map((file) => file.relativePath);
+  }
 
   const createdFiles = [];
   const createdDirectories = await collectMissingDirectories(plan.files, io);
@@ -411,16 +444,31 @@ async function exists(path, io) {
 }
 
 /**
+ * Returns whether the npm parent process requested a dry run.
+ *
+ * npm consumes a bare `--dry-run` as its own config flag instead of forwarding
+ * it to the script, exposing it as `npm_config_dry_run` instead. Reading that
+ * here makes `npm run generate <kind> <name> --dry-run` behave as expected.
+ *
+ * @returns True when npm reports dry-run mode.
+ */
+function isNpmDryRun() {
+  return process.env.npm_config_dry_run === "true";
+}
+
+/**
  * Runs the generator as a CLI.
  *
  * @param argv - Arguments after the script path.
  * @param cwd - Working directory.
  */
 export async function runGenerateCli(argv, cwd = process.cwd()) {
-  const { kind, name } = parseGenerateArgs(argv);
-  const written = await generateScaffold(kind, name, { cwd });
+  const { kind, name, dryRun } = parseGenerateArgs(argv);
+  const effectiveDryRun = dryRun || isNpmDryRun();
+  const files = await generateScaffold(kind, name, { cwd, dryRun: effectiveDryRun });
+  const heading = effectiveDryRun ? "Would create:" : "Created:";
 
-  process.stdout.write(`Created:\n${written.map((path) => `  ${path}`).join("\n")}\n`);
+  process.stdout.write(`${heading}\n${files.map((path) => `  ${path}`).join("\n")}\n`);
 }
 
 const cliEntry = process.argv[1] ? pathToFileURL(resolve(process.argv[1])).href : undefined;
