@@ -1,7 +1,7 @@
 import { prompt } from "../../core/decorators";
 import type { IMcpPromptHandler } from "../../core/types";
 import { CodeReviewPromptArgsSchema } from "./code-review.schemas";
-import type { CodeReviewPromptArgs } from "./code-review.types";
+import type { CodeReviewPromptArgsType } from "./code-review.types";
 
 /**
  * Builds a prompt requesting a code review.
@@ -19,7 +19,7 @@ export class CodeReviewPrompt implements IMcpPromptHandler {
    * @param args - Validated prompt arguments.
    * @returns The prompt text.
    */
-  public handler(args: CodeReviewPromptArgs): string {
+  public handler(args: CodeReviewPromptArgsType): string {
     return `Review the following code:\n\n${args.code}`;
   }
 }

@@ -85,6 +85,9 @@ class ConvertTool implements IMcpToolHandler {
 const BadToolInputSchema = z.object({ n: z.number() });
 const BadToolOutputSchema = z.object({ value: z.string() });
 
+/**
+ * Tool rejected by the typed decorator for an incompatible output shape.
+ */
 // @ts-expect-error - the handler result does not match the output schema.
 @tool({
   name: "bad",
@@ -139,6 +142,9 @@ class ScalarOutputTool implements IMcpToolHandler {
 
 const BadPromptArgsSchema = z.object({ code: z.string() });
 
+/**
+ * Prompt rejected by the typed decorator for an incompatible argument shape.
+ */
 // @ts-expect-error - the handler argument does not match the prompt args schema.
 @prompt({
   name: "bad_prompt",

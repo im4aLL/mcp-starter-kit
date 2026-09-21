@@ -9,15 +9,15 @@ const { serveStdioSpy } = vi.hoisted(() => ({ serveStdioSpy: vi.fn() }));
 vi.mock("@modelcontextprotocol/server/stdio", () => ({ serveStdio: serveStdioSpy }));
 
 // Signature of the `SIGINT` / `SIGTERM` listeners registered by the transport.
-type SignalListener = (signal: NodeJS.Signals) => void;
+type SignalListenerType = (signal: NodeJS.Signals) => void;
 
 // Spy for one `(bindings, message)` logging call.
-type LoggerSpy = ReturnType<typeof vi.fn<(bindings: Record<string, unknown>, message: string) => void>>;
+type LoggerSpyType = ReturnType<typeof vi.fn<(bindings: Record<string, unknown>, message: string) => void>>;
 
 // Logger with observable spies for the transport's logging boundaries.
 interface IObservedLogger {
-  readonly info: LoggerSpy;
-  readonly error: LoggerSpy;
+  readonly info: LoggerSpyType;
+  readonly error: LoggerSpyType;
 }
 
 // One captured handle plus its close spy.
@@ -26,7 +26,7 @@ interface IObservedHandle {
   readonly closeSpy: ReturnType<typeof vi.fn>;
 }
 
-const registeredSignals = new Map<NodeJS.Signals, SignalListener>();
+const registeredSignals = new Map<NodeJS.Signals, SignalListenerType>();
 
 let originalExitCode: number | string | null | undefined;
 
@@ -93,7 +93,7 @@ beforeEach(() => {
 
   vi.spyOn(process, "once").mockImplementation((event, listener) => {
     if (event === "SIGINT" || event === "SIGTERM") {
-      registeredSignals.set(event, listener as SignalListener);
+      registeredSignals.set(event, listener as SignalListenerType);
     }
 
     return process;

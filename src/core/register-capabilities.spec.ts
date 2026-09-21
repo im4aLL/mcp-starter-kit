@@ -274,6 +274,13 @@ describe("registerCapabilities", () => {
   it("forwards the original SDK extra to an extra-aware tool while a sample-style handler omits it", async () => {
     const sampleStyle = vi.fn().mockResolvedValue({ result: 1 });
     let passedExtra: McpRequestExtraType | undefined;
+    /**
+     * Captures the forwarded request extra and returns a domain result.
+     *
+     * @param _input - Validated tool input, intentionally unused.
+     * @param requestExtra - Request context forwarded unchanged by registration.
+     * @returns A constant domain result.
+     */
     const extraAware: IMcpToolHandler["handler"] = (_input, requestExtra) => {
       passedExtra = requestExtra;
       return { result: 2 };
@@ -457,6 +464,41 @@ describe("registerCapabilities", () => {
 
     expect(result).toEqual({
       contents: [{ uri: "project://info", mimeType: "application/json", text: JSON.stringify({ name: "starter" }) }],
+    });
+  });
+
+  it("derives text/plain contents for a string even when the listing MIME hint disagrees", async () => {
+    const handler = vi.fn().mockResolvedValue("plain text body");
+    const { server, resourceRegistrations } = createCapturingServer();
+    const resolved: IResolvedResource = {
+      metadata: { ...requireFixtureResourceMetadata(), mimeType: "application/json" },
+      instance: { handler },
+    };
+
+    registerCapabilities(server, { tools: [], prompts: [], resources: [resolved] });
+
+    const result = await resourceRegistrations[0]?.callback(new URL("project://info"), undefined);
+
+    expect(result).toEqual({
+      contents: [{ uri: "project://info", mimeType: "text/plain", text: "plain text body" }],
+    });
+  });
+
+  it("derives application/json contents for an object even when the listing MIME hint disagrees", async () => {
+    const value = { name: "starter" };
+    const handler = vi.fn().mockResolvedValue(value);
+    const { server, resourceRegistrations } = createCapturingServer();
+    const resolved: IResolvedResource = {
+      metadata: { ...requireFixtureResourceMetadata(), mimeType: "text/plain" },
+      instance: { handler },
+    };
+
+    registerCapabilities(server, { tools: [], prompts: [], resources: [resolved] });
+
+    const result = await resourceRegistrations[0]?.callback(new URL("project://info"), undefined);
+
+    expect(result).toEqual({
+      contents: [{ uri: "project://info", mimeType: "application/json", text: JSON.stringify(value) }],
     });
   });
 

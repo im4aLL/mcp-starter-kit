@@ -26,7 +26,7 @@ import type { Container, ResolutionContext } from "inversify";
 import type { IProviderConfiguration } from "./core/container";
 import { CalculatorService } from "./services/calculator-service";
 
-export type CalculatorFactory = () => CalculatorService;
+export type CalculatorFactoryType = () => CalculatorService;
 
 export const SERVICE_TOKENS = {
   CalculatorFactory: Symbol.for("CalculatorFactory"),
@@ -39,7 +39,7 @@ export const providers = {
     container.bind(CalculatorService).toSelf().inTransientScope();
 
     container
-      .bind<CalculatorFactory>(SERVICE_TOKENS.CalculatorFactory)
+      .bind<CalculatorFactoryType>(SERVICE_TOKENS.CalculatorFactory)
       .toFactory((context: ResolutionContext) => () => context.get(CalculatorService));
   },
 } satisfies IProviderConfiguration;
@@ -56,7 +56,7 @@ import type { AddToolInputType, AddToolOutputType } from "./tools/add-tool/add-t
 export class AddTool implements IMcpToolHandler {
   public constructor(
     @inject(SERVICE_TOKENS.CalculatorFactory)
-    private readonly createCalculator: CalculatorFactory,
+    private readonly createCalculator: CalculatorFactoryType,
   ) {}
 
   public handler(input: AddToolInputType): AddToolOutputType {

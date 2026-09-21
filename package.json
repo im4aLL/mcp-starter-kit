@@ -7,6 +7,10 @@
   "bin": {
     "mcp-framework": "dist/main.js"
   },
+  "files": [
+    "dist",
+    "docs"
+  ],
   "engines": {
     "node": ">=20"
   },
@@ -30,7 +34,7 @@
   "devDependencies": {
     "@biomejs/biome": "2.5.14",
     "@types/node": "24.13.3",
-    "tsup": "^8.5.1",
+    "tsup": "8.5.1",
     "tsx": "4.23.15",
     "typescript": "6.0.3",
     "vitest": "4.1.11"

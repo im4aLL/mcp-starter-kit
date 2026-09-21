@@ -1,6 +1,6 @@
 import { resource } from "../../core/decorators";
 import type { IMcpResourceHandler } from "../../core/types";
-import type { ProjectInfo } from "./project-info.types";
+import type { ProjectInfoType } from "./project-info.types";
 
 /**
  * Provides static information about the starter project.
@@ -18,7 +18,7 @@ export class ProjectInfoResource implements IMcpResourceHandler {
    * @param _uri - URI requested by the MCP client.
    * @returns The plain-text project description.
    */
-  public handler(_uri: string): ProjectInfo {
+  public handler(_uri: string): ProjectInfoType {
     return "A class-based MCP server starter.";
   }
 }

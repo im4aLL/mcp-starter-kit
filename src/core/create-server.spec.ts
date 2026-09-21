@@ -15,6 +15,9 @@ const { serverInfoSpy } = vi.hoisted(() => ({ serverInfoSpy: vi.fn() }));
 vi.mock("@modelcontextprotocol/server", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@modelcontextprotocol/server")>();
 
+  /**
+   * Subclass that records the advertised identity for the spec.
+   */
   class ObservedMcpServer extends actual.McpServer {
     /**
      * Records the advertised identity before delegating to the real constructor.
