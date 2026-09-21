@@ -1,0 +1,40 @@
+{
+  "name": "@im4all/create-mcp-starter-kit",
+  "version": "1.0.0",
+  "description": "Scaffold a class-based MCP server project from the mcp-starter-kit template.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "create-mcp-starter-kit": "dist/main.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/im4aLL/mcp-starter-kit.git",
+    "directory": "package"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx src/main.ts",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "npm run typecheck && npm run build && vitest run"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.14",
+    "@types/node": "24.13.3",
+    "tsup": "8.5.1",
+    "tsx": "4.23.15",
+    "typescript": "6.0.3",
+    "vitest": "4.1.11"
+  }
+}

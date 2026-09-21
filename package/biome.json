@@ -6,7 +6,7 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["src/**/*.ts", "scripts/**/*.mjs", "scripts/**/*.ts", "*.json", "!!package"]
+    "includes": ["src/**/*.ts", "*.ts", "*.json"]
   },
   "formatter": {
     "enabled": true,
@@ -21,9 +21,6 @@
     }
   },
   "javascript": {
-    "parser": {
-      "unsafeParameterDecoratorsEnabled": true
-    },
     "formatter": {
       "quoteStyle": "double",
       "semicolons": "always",

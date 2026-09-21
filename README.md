@@ -1,6 +1,6 @@
 # MCP class-based starter
 
-A copyable, class-based TypeScript starter for an MCP server that runs over stdio. It ships one example tool, resource, and prompt, keeps domain handlers separate from MCP wire mapping, and keeps the framework core application-agnostic.
+A class-based TypeScript starter for an MCP server that runs over stdio. It ships one example tool, resource, and prompt, keeps domain handlers separate from MCP wire mapping, and keeps the framework core application-agnostic.
 
 This repository is a starter to duplicate, not a reusable framework package. Keep names generic, the core thin, and the sample capabilities obvious to replace.
 
@@ -47,20 +47,20 @@ npm run generate tool multiply --dry-run
 
 Naming appends the kind suffix to a kebab-case base name:
 
-| Command | Files |
-| --- | --- |
-| `npm run generate tool multiply` | `src/tools/multiply-tool/` with `multiply-tool.ts`, `multiply-tool.schemas.ts`, `multiply-tool.types.ts`, and `multiply-tool.spec.ts` |
-| `npm run generate resource status` | `src/resources/status-resource/` with the same four-file layout |
-| `npm run generate prompt greet` | `src/prompts/greet-prompt/` with the same four-file layout |
-| `npm run generate service inventory` | `src/services/inventory-service.ts` and `src/services/inventory-service.spec.ts` |
+| Command                              | Files                                                                                                                                 |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run generate tool multiply`     | `src/tools/multiply-tool/` with `multiply-tool.ts`, `multiply-tool.schemas.ts`, `multiply-tool.types.ts`, and `multiply-tool.spec.ts` |
+| `npm run generate resource status`   | `src/resources/status-resource/` with the same four-file layout                                                                       |
+| `npm run generate prompt greet`      | `src/prompts/greet-prompt/` with the same four-file layout                                                                            |
+| `npm run generate service inventory` | `src/services/inventory-service.ts` and `src/services/inventory-service.spec.ts`                                                      |
 
 Pass a slash-separated kebab-case path to nest the scaffold in subdirectories. The last segment is the base name; earlier segments become folders:
 
-| Command | Files |
-| --- | --- |
-| `npm run generate tool nested/multiply` | `src/tools/nested/multiply-tool/` with the four-file layout |
-| `npm run generate resource github/status` | `src/resources/github/status-resource/` with the four-file layout |
-| `npm run generate prompt code/review` | `src/prompts/code/review-prompt/` with the four-file layout |
+| Command                                    | Files                                                                                        |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| `npm run generate tool nested/multiply`    | `src/tools/nested/multiply-tool/` with the four-file layout                                  |
+| `npm run generate resource github/status`  | `src/resources/github/status-resource/` with the four-file layout                            |
+| `npm run generate prompt code/review`      | `src/prompts/code/review-prompt/` with the four-file layout                                  |
 | `npm run generate service billing/invoice` | `src/services/billing/invoice-service.ts` and `src/services/billing/invoice-service.spec.ts` |
 
 Each kind's file contents come from the templates under `scripts/templates/` (`tool.ts.template`, `tool.schemas.ts.template`, and so on). Update those files when a capability convention changes; `scripts/generate.mjs` only handles argument validation, path planning, and safe writes.
@@ -76,8 +76,14 @@ Put MCP metadata and Inversify injectable metadata on a class with one project d
 ```ts
 import { tool } from "../../core/decorators";
 import type { IMcpToolHandler } from "../../core/types";
-import type { SomethingInputType, SomethingOutputType } from "./something.types";
-import { SomethingInputSchema, SomethingOutputSchema } from "./something.schemas";
+import type {
+  SomethingInputType,
+  SomethingOutputType,
+} from "./something.types";
+import {
+  SomethingInputSchema,
+  SomethingOutputSchema,
+} from "./something.schemas";
 
 @tool({
   name: "something",
@@ -98,7 +104,7 @@ The `@tool`, `@resource`, and `@prompt` decorators already apply Inversify `inje
 
 ## List registered capabilities
 
-`npm run list:capabilities` builds the project and prints every constructor returned by `getCapabilityTypes()` as a console table with its decorator metadata:
+`npm run list:capabilities` prints every constructor returned by `getCapabilityTypes()` as a console table with its decorator metadata:
 
 ```sh
 npm run list:capabilities
@@ -106,15 +112,15 @@ npm run list:capabilities
 
 The table has stable `type`, `name`, `identifier`, and `description` columns. Rows are ordered by capability type (`tool`, `resource`, `prompt`) and then by name. A resource identifier is its URI; a tool or prompt identifier is its capability name.
 
-Listing reads `@tool`, `@resource`, and `@prompt` metadata directly. It never creates an Inversify container, resolves a dependency, invokes a capability constructor or handler, creates an `McpServer`, starts stdio, or loads `src/providers.ts`. It is metadata inspection only.
-
-The npm command always rebuilds first, so the table matches the current `src/` sources. To list without rebuilding when `dist/` is already fresh, run the script directly:
+The command reads the application sources directly through `tsx`, so it always reflects the current `src/` without a build step:
 
 ```sh
-node scripts/list-capabilities.mjs
+tsx scripts/list-capabilities.ts
 ```
 
-Missing capability metadata, a wrong decorator kind, multiple capability decorators on one class, duplicate identifiers, and a missing or stale build fail on stderr with a nonzero exit code and a recovery command instead of printing an incomplete table.
+Listing reads `@tool`, `@resource`, and `@prompt` metadata directly. It never creates an Inversify container, resolves a dependency, invokes a capability constructor or handler, creates an `McpServer`, starts stdio, or loads `src/providers.ts`. It is metadata inspection only.
+
+Missing capability metadata, a wrong decorator kind, multiple capability decorators on one class, and duplicate identifiers fail on stderr with a nonzero exit code and recovery guidance instead of printing an incomplete table.
 
 ## Register services and lifetimes
 
@@ -144,7 +150,9 @@ container.bind(CalculatorService).toSelf().inTransientScope();
 
 container
   .bind<CalculatorFactoryType>(SERVICE_TOKENS.CalculatorFactory)
-  .toFactory((context: ResolutionContext) => () => context.get(CalculatorService));
+  .toFactory(
+    (context: ResolutionContext) => () => context.get(CalculatorService),
+  );
 ```
 
 Put non-default bindings such as symbol tokens, alternate implementations, constants, transient scope, and factories in the optional `configure(container)` callback, and omit that service from `services` so it is bound exactly once. See [docs/providers-usage.md](docs/providers-usage.md) for the complete factory example.

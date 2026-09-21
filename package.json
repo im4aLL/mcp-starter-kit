@@ -1,8 +1,8 @@
 {
   "name": "mcp-starter-kit",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
-  "description": "Copyable class-based MCP server starter built on @modelcontextprotocol/server v2.",
+  "description": "Class-based MCP server starter built on @modelcontextprotocol/server v2.",
   "type": "module",
   "bin": {
     "mcp-starter-kit": "dist/main.js"
@@ -25,7 +25,7 @@
     "test": "npm run typecheck && vitest run",
     "inspect": "npm run build && npx @modelcontextprotocol/inspector node dist/main.js",
     "generate": "node scripts/generate.mjs",
-    "list:capabilities": "node scripts/list-capabilities.mjs"
+    "list:capabilities": "tsx scripts/list-capabilities.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.0.0",

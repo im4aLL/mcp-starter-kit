@@ -9,14 +9,13 @@ import { CalculatorService } from "./services/calculator-service";
 // `CalculatorService` directly; a transient constructor dependency is new per
 // capability resolution, not per `handler()` call.
 //
-// For per-invocation factories and other non-default lifetimes, see below. 
+// For per-invocation factories and other non-default lifetimes, see below.
 // A service with a custom binding must be OMITTED
 // from `services` so it is bound exactly once, and `src/core/container.ts`
 // stays generic and application-agnostic.
 export const providers = {
   services: [CalculatorService],
 } satisfies IProviderConfiguration;
-
 
 /*
 Provider and lifetime usage

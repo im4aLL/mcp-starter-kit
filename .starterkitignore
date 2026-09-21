@@ -1,0 +1,10 @@
+# Paths removed from scaffolded projects.
+# One literal relative path per line (no globs, no negation).
+# Blank lines and lines starting with # are ignored.
+# The .git directory and this .starterkitignore file are always removed by the CLI.
+package/
+dist/
+node_modules/
+coverage/
+logs/
+.starterkitignore

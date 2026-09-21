@@ -7,11 +7,11 @@ import { getCapabilityTypes } from "./capabilities/capabilities";
 import { FixtureAddToolInputSchema, FixtureAddToolOutputSchema } from "./core/core-test-fixtures";
 import { tool } from "./core/decorators";
 import { listCapabilityMetadata } from "./core/list-capability-metadata";
-import type { ICapabilityMetadataRow, IMcpToolHandler } from "./core/types";
+import type { ICapabilities, ICapabilityMetadataRow, IMcpToolHandler } from "./core/types";
 
 const testDirectory = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(testDirectory, "..");
-const listScript = resolve(repoRoot, "scripts/list-capabilities.mjs");
+const listScript = resolve(repoRoot, "scripts", "list-capabilities.ts");
 const listModuleUrl = pathToFileURL(listScript).href;
 
 // Minimal output sink used to observe rendering without touching the console.
@@ -25,17 +25,24 @@ interface IErrorSink {
   write(text: string): void;
 }
 
-// Exported surface of `scripts/list-capabilities.mjs` used by these tests.
-interface IListCapabilitiesModule {
-  listCapabilityRows(options?: Record<string, unknown>): Promise<readonly ICapabilityMetadataRow[]>;
-  renderCapabilityRows(rows: readonly ICapabilityMetadataRow[], output?: IOutputSink): void;
-  runListCapabilities(options?: Record<string, unknown>): Promise<number>;
+// A composition module injected in place of the real source composition.
+interface ICompositionModule {
+  getCapabilityTypes(): ICapabilities;
+  listCapabilityMetadata(capabilityTypes: ICapabilities): readonly ICapabilityMetadataRow[];
 }
 
-// A composition module injected in place of the built `dist/list-capabilities.js`.
-interface ICompositionModule {
-  getCapabilityTypes(): unknown;
-  listCapabilityMetadata(capabilityTypes: unknown): readonly ICapabilityMetadataRow[];
+// Options accepted by the listing entry points under test.
+interface IListOptions {
+  loadModule?: () => Promise<ICompositionModule>;
+  output?: IOutputSink;
+  errorOutput?: IErrorSink;
+}
+
+// Exported surface of `scripts/list-capabilities.ts` used by these tests.
+interface IListCapabilitiesModule {
+  listCapabilityRows(options?: IListOptions): Promise<readonly ICapabilityMetadataRow[]>;
+  renderCapabilityRows(rows: readonly ICapabilityMetadataRow[], output?: IOutputSink): void;
+  runListCapabilities(options?: IListOptions): Promise<number>;
 }
 
 /**
@@ -136,7 +143,7 @@ async function loadListModule(): Promise<IListCapabilitiesModule> {
  * @param capabilityTypes - Capability constructor lists returned by the fake module.
  * @returns A composition module exposing the real metadata listing function.
  */
-function createComposition(capabilityTypes: unknown): ICompositionModule {
+function createComposition(capabilityTypes: ICapabilities): ICompositionModule {
   return {
     getCapabilityTypes: () => capabilityTypes,
     listCapabilityMetadata,
@@ -165,7 +172,27 @@ function createErrorSink(): IErrorSink {
 }
 
 describe("list-capabilities script", () => {
-  it("prints the starter capabilities from an injected composition without a build", async () => {
+  it("reads the starter capabilities from source through the default loader", async () => {
+    const module = await loadListModule();
+    const output = createOutputSink();
+    const errorOutput = createErrorSink();
+    const exitCode = await module.runListCapabilities({ output, errorOutput });
+
+    expect(exitCode).toBe(0);
+    expect(errorOutput.write).not.toHaveBeenCalled();
+    expect(output.log).not.toHaveBeenCalled();
+
+    const rows = vi.mocked(output.table).mock.calls[0]?.[0] ?? [];
+
+    expect(rows.map((row) => `${row.type}:${row.identifier}`)).toEqual([
+      "tool:add",
+      "resource:project://info",
+      "prompt:code_review",
+    ]);
+    expect(rows[0]?.description).toBe("Adds two numbers together.");
+  });
+
+  it("prints the starter capabilities from an injected composition", async () => {
     const module = await loadListModule();
     const output = createOutputSink();
     const errorOutput = createErrorSink();
@@ -223,7 +250,7 @@ describe("list-capabilities script", () => {
     const message = vi.mocked(errorOutput.write).mock.calls[0]?.[0] ?? "";
 
     expect(message).toContain("missing the @tool decorator");
-    expect(message).toContain("npm run build");
+    expect(message).toContain("then retry");
   });
 
   it("fails with recovery guidance when two listed tools share an identifier", async () => {
@@ -243,7 +270,7 @@ describe("list-capabilities script", () => {
     const message = vi.mocked(errorOutput.write).mock.calls[0]?.[0] ?? "";
 
     expect(message).toContain('Duplicate tool name "duplicate_tool"');
-    expect(message).toContain("npm run build");
+    expect(message).toContain("then retry");
   });
 
   it("fails as a module-load failure when a capability class has multiple decorators", async () => {
@@ -269,34 +296,7 @@ describe("list-capabilities script", () => {
 
     expect(message).toContain("Failed to load");
     expect(message).toContain("already has a capability decorator");
-    expect(message).toContain("npm run build");
-  });
-
-  it("fails clearly when the built listing output is missing", async () => {
-    const module = await loadListModule();
-    const missingEntry = resolve(repoRoot, "dist", "__missing-list-capabilities__.js");
-
-    await expect(module.listCapabilityRows({ entryPath: missingEntry })).rejects.toThrow(
-      /Failed to load[\s\S]*npm run build/,
-    );
-  });
-
-  it("fails clearly when the built listing output predates the listing API", async () => {
-    const module = await loadListModule();
-    const output = createOutputSink();
-    const errorOutput = createErrorSink();
-    const exitCode = await module.runListCapabilities({
-      loadModule: async () => ({}),
-      output,
-      errorOutput,
-    });
-
-    expect(exitCode).toBe(1);
-
-    const message = vi.mocked(errorOutput.write).mock.calls[0]?.[0] ?? "";
-
-    expect(message).toContain("missing expected exports");
-    expect(message).toContain("npm run build");
+    expect(message).toContain("Fix the capability modules under src/");
   });
 
   it("never invokes a listed constructor", async () => {
