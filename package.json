@@ -1,11 +1,11 @@
 {
-  "name": "mcp-framework",
+  "name": "mcp-starter-kit",
   "version": "0.1.0",
   "private": true,
   "description": "Copyable class-based MCP server starter built on @modelcontextprotocol/server v2.",
   "type": "module",
   "bin": {
-    "mcp-framework": "dist/main.js"
+    "mcp-starter-kit": "dist/main.js"
   },
   "files": [
     "dist",

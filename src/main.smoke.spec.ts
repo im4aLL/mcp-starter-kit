@@ -261,7 +261,7 @@ describe("dist/main.js stdio lifecycle", () => {
 
 describe("dist/main.js outside the repository working directory", () => {
   it("handshakes and terminates cleanly from an external cwd with stdout protocol-only", async () => {
-    const outsideCwd = mkdtempSync(join(tmpdir(), "mcp-framework-smoke-"));
+    const outsideCwd = mkdtempSync(join(tmpdir(), "mcp-starter-kit-smoke-"));
 
     try {
       const result = await runSmoke("stdin", outsideCwd);
@@ -294,7 +294,7 @@ describe("dist/main.js protocol session", () => {
       const initialize = await sendRequest(child, lines, initializeRequest);
       const serverInfo = (initialize.result as { readonly serverInfo: { readonly name: string } }).serverInfo;
 
-      expect(serverInfo.name).toBe("mcp-framework");
+      expect(serverInfo.name).toBe("mcp-starter-kit");
 
       child.stdin.write(`${JSON.stringify(initializedNotification)}\n`);
 

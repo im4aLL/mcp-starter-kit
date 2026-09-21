@@ -50,7 +50,7 @@ describe("serverConfig", () => {
 
     const { serverConfig } = await import("./config");
 
-    expect(serverConfig).toEqual({ name: "mcp-framework", version: "0.1.0" });
+    expect(serverConfig).toEqual({ name: "mcp-starter-kit", version: "0.1.0" });
   });
 
   it("applies the name and version environment overrides", async () => {

@@ -158,7 +158,7 @@ Build first, then point Cursor at the absolute built path:
 ```json
 {
   "mcpServers": {
-    "mcp-framework": {
+    "mcp-starter-kit": {
       "command": "node",
       "args": ["/absolute/path/to/repo/dist/main.js"]
     }

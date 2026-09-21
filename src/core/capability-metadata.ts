@@ -5,7 +5,7 @@ import type { Newable } from "inversify";
 import type { StoredCapabilityMetadataType } from "./decorators/decorators.types";
 
 // Single shared metadata key every capability decorator reads and writes.
-const capabilityMetadataKey = Symbol("mcp-framework.capability-metadata");
+const capabilityMetadataKey = Symbol("mcp-starter-kit.capability-metadata");
 
 /**
  * Rejects a constructor that already carries a capability decorator.
