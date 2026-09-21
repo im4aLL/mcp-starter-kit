@@ -6,15 +6,23 @@ import {
   type McpServer,
   type ReadResourceResult,
 } from "@modelcontextprotocol/server";
+import type { Container } from "inversify";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 
 import { serverConfig } from "../config";
 import { createAppContainer } from "../core/container";
 import { createServer } from "../core/create-server";
-import { getResourceMetadata } from "../core/decorators";
+import { getResourceMetadata, tool } from "../core/decorators";
 import { ResourceSerializationError } from "../core/map-results";
 import { resolveCapabilities } from "../core/resolve-capabilities";
-import type { IMcpResourceHandler, IResolvedCapabilities, IResolvedResource } from "../core/types";
+import type {
+  ICapabilities,
+  IMcpResourceHandler,
+  IMcpToolHandler,
+  IResolvedCapabilities,
+  IResolvedResource,
+} from "../core/types";
 import { CodeReviewPrompt } from "../prompts/code-review/code-review";
 import { providers } from "../providers";
 import { ProjectInfoResource } from "../resources/project-info/project-info";
@@ -100,6 +108,64 @@ function createUnserializableResolvedResource(handler: IMcpResourceHandler["hand
   }
 
   return { metadata, instance: { handler } };
+}
+
+// Test-only counter proving the SDK runs the input transform exactly once.
+let transformedInputCount = 0;
+
+const TransformedToolInputSchema = z.object({ raw: z.string() }).transform((input) => {
+  transformedInputCount += 1;
+
+  return { value: Number(input.raw) };
+});
+
+const TransformedToolOutputSchema = z.object({ value: z.number() });
+
+// Test-only capture of the exact argument the SDK passed to the handler.
+let lastTransformedInput: z.output<typeof TransformedToolInputSchema> | undefined;
+
+/**
+ * Test-only tool whose input schema transforms raw input in the SDK.
+ */
+@tool({
+  name: "transformed",
+  description: "Test-only tool with a transformed input schema.",
+  inputSchema: TransformedToolInputSchema,
+  outputSchema: TransformedToolOutputSchema,
+})
+class TransformedTool implements IMcpToolHandler {
+  /**
+   * Records the SDK-applied input and returns its transformed value.
+   *
+   * @param input - Input already transformed by the SDK schema.
+   * @returns The transformed structured output.
+   */
+  public handler(input: z.output<typeof TransformedToolInputSchema>): z.output<typeof TransformedToolOutputSchema> {
+    lastTransformedInput = input;
+
+    return { value: input.value };
+  }
+}
+
+// Mirrors the createAppServer composition in `src/main.ts`; keep the steps in sync.
+/**
+ * Builds one application server with its own container and resolved capabilities.
+ *
+ * Mirrors the composition in `src/main.ts` without importing it, so tests can
+ * observe container and instance identity across repeated factory calls.
+ *
+ * @returns The container, resolved capabilities, and server for one composition.
+ */
+function composeApplicationServer(): {
+  container: Container;
+  capabilities: IResolvedCapabilities;
+  server: McpServer;
+} {
+  const capabilityTypes = getCapabilityTypes();
+  const container = createAppContainer(capabilityTypes, providers);
+  const capabilities = resolveCapabilities(container, capabilityTypes);
+
+  return { container, capabilities, server: createServer(capabilities, serverConfig) };
 }
 
 describe("application capability composition", () => {
@@ -369,5 +435,58 @@ describe("SDK prompt validation", () => {
 
     // Only the valid retrieval reached the handler; the SDK rejected both invalid calls.
     expect(handlerSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+// Tool input is the representative path: core never calls `.parse()` on any
+// schema, so input, output, and prompt-args transforms all run only in the SDK.
+describe("SDK schema transforms", () => {
+  it("runs a test-only input transform exactly once and passes z.output to the handler", async () => {
+    transformedInputCount = 0;
+    lastTransformedInput = undefined;
+
+    const capabilityTypes: ICapabilities = { tools: [TransformedTool], prompts: [], resources: [] };
+    const container = createAppContainer(capabilityTypes, providers);
+    const capabilities = resolveCapabilities(container, capabilityTypes);
+    const server = createServer(capabilities, serverConfig);
+    const client = await connectTestClient(server);
+
+    try {
+      const init = await client.request(1, "initialize", {
+        protocolVersion: "2025-11-25",
+        capabilities: {},
+        clientInfo: { name: "test-client", version: "1.0.0" },
+      });
+      expect(init.error).toBeUndefined();
+
+      await client.notify("notifications/initialized");
+
+      const call = await client.request(2, "tools/call", { name: "transformed", arguments: { raw: "42" } });
+      const callResult = call.result as CallToolResult;
+
+      expect(call.error).toBeUndefined();
+      expect(callResult.structuredContent).toEqual({ value: 42 });
+    } finally {
+      await client.close();
+    }
+
+    expect(transformedInputCount).toBe(1);
+    expect(lastTransformedInput).toEqual({ value: 42 });
+    expect(lastTransformedInput).not.toEqual({ raw: "42" });
+  });
+});
+
+describe("application server factory isolation", () => {
+  it("creates a new container, fresh capabilities, and isolated singletons per invocation", () => {
+    const first = composeApplicationServer();
+    const second = composeApplicationServer();
+
+    expect(first.container).not.toBe(second.container);
+    expect(first.server).not.toBe(second.server);
+    expect(first.capabilities.tools[0]?.instance).not.toBe(second.capabilities.tools[0]?.instance);
+    expect(first.capabilities.prompts[0]?.instance).not.toBe(second.capabilities.prompts[0]?.instance);
+    expect(first.capabilities.resources[0]?.instance).not.toBe(second.capabilities.resources[0]?.instance);
+    expect(first.container.get(CalculatorService)).toBe(first.container.get(CalculatorService));
+    expect(first.container.get(CalculatorService)).not.toBe(second.container.get(CalculatorService));
   });
 });

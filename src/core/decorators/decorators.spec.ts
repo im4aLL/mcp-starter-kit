@@ -1,3 +1,4 @@
+import { injectable } from "inversify";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -192,6 +193,33 @@ describe("@tool", () => {
 
       void DoublyDecoratedTool;
     }).toThrow(/already has a capability decorator/);
+  });
+
+  it("rejects combining an explicit @injectable() with @tool during class evaluation", () => {
+    expect(() => {
+      /**
+       * Class combining Inversify's injectable decorator with the capability decorator.
+       */
+      @injectable()
+      @tool({
+        name: "explicit_injectable",
+        description: "Unsupported explicit injectable combination.",
+        inputSchema: FixtureAddToolInputSchema,
+        outputSchema: FixtureAddToolOutputSchema,
+      })
+      class ExplicitInjectableTool implements IMcpToolHandler {
+        /**
+         * Returns a trivial result.
+         *
+         * @returns A constant JSON object.
+         */
+        public handler(): { readonly result: number } {
+          return { result: 0 };
+        }
+      }
+
+      void ExplicitInjectableTool;
+    }).toThrow(/Cannot apply @injectable decorator multiple times/);
   });
 
   it("does not replace the decorated constructor", () => {

@@ -51,7 +51,9 @@ export function createAppContainer(capabilityTypes: ICapabilities, providers: IP
   providers.configure?.(container);
 
   bindCapabilities(container, capabilityTypes.tools);
+
   bindCapabilities(container, capabilityTypes.prompts);
+
   bindCapabilities(container, capabilityTypes.resources);
 
   return container;

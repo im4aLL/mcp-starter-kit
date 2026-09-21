@@ -6,92 +6,143 @@ import type {
   IMcpPromptHandler,
   IMcpResourceHandler,
   IMcpToolHandler,
+  IPromptMetadata,
   IResolvedCapabilities,
-  IResolvedPrompt,
-  IResolvedResource,
-  IResolvedTool,
+  IResourceMetadata,
+  IToolMetadata,
 } from "./types";
 
 /**
- * Resolves one listed tool constructor into metadata plus an instance.
+ * Reads the required `@tool` metadata for one listed constructor.
  *
- * @param container - Per-server container holding the constructor binding.
  * @param toolConstructor - Tool constructor listed by the application.
- * @returns The resolved tool record.
- * @throws Error when the constructor lacks `@tool` metadata.
+ * @returns The decorator-owned tool metadata.
+ * @throws Error when the constructor lacks `@tool` metadata or carries a
+ * different capability decorator.
  */
-function resolveTool(container: Container, toolConstructor: Newable<IMcpToolHandler>): IResolvedTool {
+function requireToolMetadata(toolConstructor: Newable<IMcpToolHandler>): IToolMetadata {
   const metadata = getToolMetadata(toolConstructor);
 
   if (metadata === undefined) {
     throw new Error(`Tool constructor "${toolConstructor.name}" is missing the @tool decorator.`);
   }
 
-  const instance = container.get(toolConstructor);
-
-  return { metadata, instance };
+  return metadata;
 }
 
 /**
- * Resolves one listed resource constructor into metadata plus an instance.
+ * Reads the required `@resource` metadata for one listed constructor.
  *
- * @param container - Per-server container holding the constructor binding.
  * @param resourceConstructor - Resource constructor listed by the application.
- * @returns The resolved resource record.
+ * @returns The decorator-owned resource metadata.
  * @throws Error when the constructor lacks `@resource` metadata or carries a
  * different capability decorator.
  */
-function resolveResource(container: Container, resourceConstructor: Newable<IMcpResourceHandler>): IResolvedResource {
+function requireResourceMetadata(resourceConstructor: Newable<IMcpResourceHandler>): IResourceMetadata {
   const metadata = getResourceMetadata(resourceConstructor);
 
   if (metadata === undefined) {
     throw new Error(`Resource constructor "${resourceConstructor.name}" is missing the @resource decorator.`);
   }
 
-  const instance = container.get(resourceConstructor);
-
-  return { metadata, instance };
+  return metadata;
 }
 
 /**
- * Resolves one listed prompt constructor into metadata plus an instance.
+ * Reads the required `@prompt` metadata for one listed constructor.
  *
- * @param container - Per-server container holding the constructor binding.
  * @param promptConstructor - Prompt constructor listed by the application.
- * @returns The resolved prompt record.
+ * @returns The decorator-owned prompt metadata.
  * @throws Error when the constructor lacks `@prompt` metadata or carries a
  * different capability decorator.
  */
-function resolvePrompt(container: Container, promptConstructor: Newable<IMcpPromptHandler>): IResolvedPrompt {
+function requirePromptMetadata(promptConstructor: Newable<IMcpPromptHandler>): IPromptMetadata {
   const metadata = getPromptMetadata(promptConstructor);
 
   if (metadata === undefined) {
     throw new Error(`Prompt constructor "${promptConstructor.name}" is missing the @prompt decorator.`);
   }
 
-  const instance = container.get(promptConstructor);
+  return metadata;
+}
 
-  return { metadata, instance };
+/**
+ * Rejects an identifier reused across resolved capability metadata.
+ *
+ * Identifiers come from decorator metadata, so two distinct classes that
+ * declare the same tool name, prompt name, or resource URI fail at composition
+ * time instead of shadowing each other on the wire.
+ *
+ * @param label - Human-readable identifier label used in the error message.
+ * @param identifiers - Resolved identifiers to check.
+ * @throws Error when an identifier appears more than once.
+ */
+function assertUniqueIdentifiers(label: string, identifiers: readonly string[]): void {
+  const seen = new Set<string>();
+
+  for (const identifier of identifiers) {
+    if (seen.has(identifier)) {
+      throw new Error(`Duplicate ${label} "${identifier}": each listed capability must have a unique identifier.`);
+    }
+
+    seen.add(identifier);
+  }
 }
 
 /**
  * Resolves the listed capability constructors through a per-server container.
  *
- * Validation happens before server registration, so a misconfigured capability
- * fails at composition time rather than on first invocation.
+ * Metadata for every listed constructor is read, and identifiers are checked
+ * for uniqueness, before any instance is resolved. A misconfigured capability
+ * therefore fails at composition time without constructing any listed class.
  *
  * @param container - Per-server container to resolve from.
  * @param capabilityTypes - Explicit capability constructor lists.
  * @returns Resolved runtime capabilities for registration.
- * @throws Error when a listed constructor lacks its decorator or carries a
- * different capability decorator.
+ * @throws Error when a listed constructor lacks its decorator, carries a
+ * different capability decorator, or duplicates another capability identifier.
  */
 export function resolveCapabilities(container: Container, capabilityTypes: ICapabilities): IResolvedCapabilities {
-  const tools = capabilityTypes.tools.map((toolConstructor) => resolveTool(container, toolConstructor));
-  const prompts = capabilityTypes.prompts.map((promptConstructor) => resolvePrompt(container, promptConstructor));
-  const resources = capabilityTypes.resources.map((resourceConstructor) =>
-    resolveResource(container, resourceConstructor),
+  const toolEntries = capabilityTypes.tools.map((toolConstructor) => ({
+    metadata: requireToolMetadata(toolConstructor),
+    toolConstructor,
+  }));
+  const promptEntries = capabilityTypes.prompts.map((promptConstructor) => ({
+    metadata: requirePromptMetadata(promptConstructor),
+    promptConstructor,
+  }));
+  const resourceEntries = capabilityTypes.resources.map((resourceConstructor) => ({
+    metadata: requireResourceMetadata(resourceConstructor),
+    resourceConstructor,
+  }));
+
+  assertUniqueIdentifiers(
+    "tool name",
+    toolEntries.map((entry) => entry.metadata.name),
   );
+
+  assertUniqueIdentifiers(
+    "prompt name",
+    promptEntries.map((entry) => entry.metadata.name),
+  );
+
+  assertUniqueIdentifiers(
+    "resource URI",
+    resourceEntries.map((entry) => entry.metadata.uri),
+  );
+
+  const tools = toolEntries.map(({ metadata, toolConstructor }) => ({
+    metadata,
+    instance: container.get(toolConstructor),
+  }));
+  const prompts = promptEntries.map(({ metadata, promptConstructor }) => ({
+    metadata,
+    instance: container.get(promptConstructor),
+  }));
+  const resources = resourceEntries.map(({ metadata, resourceConstructor }) => ({
+    metadata,
+    instance: container.get(resourceConstructor),
+  }));
 
   return { tools, prompts, resources };
 }

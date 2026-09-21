@@ -107,6 +107,36 @@ class BadTool implements IMcpToolHandler {
   }
 }
 
+const ScalarToolInputSchema = z.object({ value: z.number() });
+
+/**
+ * Tool rejected by the typed decorator for a top-level scalar output schema.
+ *
+ * MCP structured tool output is object-shaped, so a top-level scalar output
+ * schema does not satisfy the `@tool` output-schema constraint.
+ */
+@tool({
+  name: "scalar",
+  description: "Type fixture rejected for a top-level scalar output schema.",
+  inputSchema: ScalarToolInputSchema,
+  // @ts-expect-error - a top-level scalar output schema is not an object-shaped MCP structured output.
+  outputSchema: z.number(),
+})
+class ScalarOutputTool implements IMcpToolHandler {
+  /**
+   * Returns a wrapped object despite the rejected scalar output schema.
+   *
+   * The handler itself is valid; only the typed `@tool` decorator rejects the
+   * scalar output schema.
+   *
+   * @param input - Validated input.
+   * @returns An object-wrapped value.
+   */
+  public handler(input: z.output<typeof ScalarToolInputSchema>): { readonly result: number } {
+    return { result: input.value };
+  }
+}
+
 const BadPromptArgsSchema = z.object({ code: z.string() });
 
 // @ts-expect-error - the handler argument does not match the prompt args schema.
@@ -180,6 +210,7 @@ describe("capability type integration", () => {
   it("keeps the negative fixture reachable for the compile-time assertion", () => {
     expect(BadTool).toBeDefined();
     expect(BadPrompt).toBeDefined();
+    expect(ScalarOutputTool).toBeDefined();
     expect(ConvertTool).toBeDefined();
   });
 

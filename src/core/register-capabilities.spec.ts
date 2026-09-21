@@ -33,6 +33,7 @@ import type {
   IResolvedTool,
   IResourceMetadata,
   IToolMetadata,
+  McpRequestExtraType,
 } from "./types";
 
 // Registration captured from a minimal server stand-in.
@@ -143,6 +144,29 @@ function createResolvedPrompt(handler: IMcpPromptHandler["handler"]): IResolvedP
 }
 
 /**
+ * Creates a request-extra value typed as the verified SDK server context.
+ *
+ * The value exposes real `mcpReq` members (`signal`, `notify`, `log`, `_meta`)
+ * so tests can read them without wrapping and compare reference identity.
+ *
+ * @returns A typed server context with observable `mcpReq` members.
+ */
+function createTestExtra(): McpRequestExtraType {
+  const controller = new AbortController();
+
+  return {
+    mcpReq: {
+      id: 1,
+      method: "tools/call",
+      _meta: {},
+      signal: controller.signal,
+      notify: vi.fn().mockResolvedValue(undefined),
+      log: vi.fn().mockResolvedValue(undefined),
+    },
+  } as unknown as McpRequestExtraType;
+}
+
+/**
  * Creates a minimal `McpServer` stand-in that records capability registrations.
  *
  * @returns The stand-in server plus its captured tool, prompt, and resource registrations.
@@ -230,19 +254,55 @@ describe("registerCapabilities", () => {
     expect(registrations[0]?.config.outputSchema).toBe(FixtureAddToolOutputSchema);
   });
 
-  it("maps a domain result and forwards arguments plus extra unchanged", async () => {
+  it("maps a domain result and forwards arguments plus the exact extra reference", async () => {
     const handler = vi.fn().mockResolvedValue({ result: 3 });
     const { server, registrations } = createCapturingServer();
-    const extra = { forwarded: true };
+    const extra = createTestExtra();
 
     registerCapabilities(server, { tools: [createResolvedTool(handler)], prompts: [], resources: [] });
 
     const result = await registrations[0]?.callback({ a: 1, b: 2 }, extra);
 
     expect(handler).toHaveBeenCalledWith({ a: 1, b: 2 }, extra);
+    expect(handler.mock.calls[0]?.[1]).toBe(extra);
     expect(result).toEqual({
       content: [{ type: "text", text: JSON.stringify({ result: 3 }) }],
       structuredContent: { result: 3 },
+    });
+  });
+
+  it("forwards the original SDK extra to an extra-aware tool while a sample-style handler omits it", async () => {
+    const sampleStyle = vi.fn().mockResolvedValue({ result: 1 });
+    let passedExtra: McpRequestExtraType | undefined;
+    const extraAware: IMcpToolHandler["handler"] = (_input, requestExtra) => {
+      passedExtra = requestExtra;
+      return { result: 2 };
+    };
+    const { server, registrations } = createCapturingServer();
+    const extra = createTestExtra();
+
+    registerCapabilities(server, {
+      tools: [createResolvedTool(sampleStyle), createResolvedTool(extraAware)],
+      prompts: [],
+      resources: [],
+    });
+
+    const sampleResult = await registrations[0]?.callback({ a: 1, b: 2 }, extra);
+    const awareResult = await registrations[1]?.callback({ a: 3, b: 4 }, extra);
+
+    expect(sampleStyle).toHaveBeenCalledWith({ a: 1, b: 2 }, extra);
+    expect(passedExtra).toBe(extra);
+    expect(passedExtra?.mcpReq.signal).toBe(extra.mcpReq.signal);
+    expect(passedExtra?.mcpReq.notify).toBe(extra.mcpReq.notify);
+    expect(passedExtra?.mcpReq.log).toBe(extra.mcpReq.log);
+    expect(passedExtra?.mcpReq._meta).toBe(extra.mcpReq._meta);
+    expect(sampleResult).toEqual({
+      content: [{ type: "text", text: JSON.stringify({ result: 1 }) }],
+      structuredContent: { result: 1 },
+    });
+    expect(awareResult).toEqual({
+      content: [{ type: "text", text: JSON.stringify({ result: 2 }) }],
+      structuredContent: { result: 2 },
     });
   });
 
@@ -282,16 +342,24 @@ describe("registerCapabilities", () => {
     expect(promptRegistrations[0]?.config.argsSchema).toBe(FixtureCodeReviewPromptArgsSchema);
   });
 
-  it("maps a string prompt with the decorator role and forwards arguments plus extra unchanged", async () => {
+  it("maps a string prompt with the decorator role and forwards the exact extra reference", async () => {
     const handler = vi.fn().mockResolvedValue("Review the following code:\n\nconst x = 1;");
     const { server, promptRegistrations } = createCapturingServer();
-    const extra = { forwarded: true };
+    const extra = createTestExtra();
 
     registerCapabilities(server, { tools: [], prompts: [createResolvedPrompt(handler)], resources: [] });
 
     const result = await promptRegistrations[0]?.callback({ code: "const x = 1;" }, extra);
 
     expect(handler).toHaveBeenCalledWith({ code: "const x = 1;" }, extra);
+
+    const passedExtra = handler.mock.calls[0]?.[1] as McpRequestExtraType | undefined;
+
+    expect(passedExtra).toBe(extra);
+    expect(passedExtra?.mcpReq.signal).toBe(extra.mcpReq.signal);
+    expect(passedExtra?.mcpReq.notify).toBe(extra.mcpReq.notify);
+    expect(passedExtra?.mcpReq.log).toBe(extra.mcpReq.log);
+    expect(passedExtra?.mcpReq._meta).toBe(extra.mcpReq._meta);
     expect(result).toEqual({
       messages: [{ role: "user", content: { type: "text", text: "Review the following code:\n\nconst x = 1;" } }],
     });
@@ -306,13 +374,14 @@ describe("registerCapabilities", () => {
     };
     const handler = vi.fn().mockResolvedValue(wireResult);
     const { server, promptRegistrations } = createCapturingServer();
-    const extra = { forwarded: true };
+    const extra = createTestExtra();
 
     registerCapabilities(server, { tools: [], prompts: [createResolvedPrompt(handler)], resources: [] });
 
     const result = await promptRegistrations[0]?.callback({ code: "unused" }, extra);
 
     expect(handler).toHaveBeenCalledWith({ code: "unused" }, extra);
+    expect(handler.mock.calls[0]?.[1]).toBe(extra);
     expect(result).toBe(wireResult);
   });
 
@@ -355,16 +424,24 @@ describe("registerCapabilities", () => {
     expect(resourceRegistrations[0]?.config.mimeType).toBe("text/plain");
   });
 
-  it("maps a string resource and forwards the URI plus extra unchanged", async () => {
+  it("maps a string resource and forwards the URI plus the exact extra reference", async () => {
     const handler = vi.fn().mockResolvedValue("A class-based MCP server starter.");
     const { server, resourceRegistrations } = createCapturingServer();
-    const extra = { forwarded: true };
+    const extra = createTestExtra();
 
     registerCapabilities(server, { tools: [], prompts: [], resources: [createResolvedResource(handler)] });
 
     const result = await resourceRegistrations[0]?.callback(new URL("project://info"), extra);
 
     expect(handler).toHaveBeenCalledWith("project://info", extra);
+
+    const passedExtra = handler.mock.calls[0]?.[1] as McpRequestExtraType | undefined;
+
+    expect(passedExtra).toBe(extra);
+    expect(passedExtra?.mcpReq.signal).toBe(extra.mcpReq.signal);
+    expect(passedExtra?.mcpReq.notify).toBe(extra.mcpReq.notify);
+    expect(passedExtra?.mcpReq.log).toBe(extra.mcpReq.log);
+    expect(passedExtra?.mcpReq._meta).toBe(extra.mcpReq._meta);
     expect(result).toEqual({
       contents: [{ uri: "project://info", mimeType: "text/plain", text: "A class-based MCP server starter." }],
     });
