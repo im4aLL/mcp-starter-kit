@@ -1,6 +1,8 @@
 import type { CallToolResult, GetPromptResult, McpServer, ReadResourceResult } from "@modelcontextprotocol/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { logger } from "../utils/logger";
+import { createAppContainer } from "./container";
 import {
   FixtureAddTool,
   FixtureAddToolInputSchema,
@@ -12,6 +14,14 @@ import {
 import { getPromptMetadata, getResourceMetadata, getToolMetadata } from "./decorators";
 import { ResourceSerializationError } from "./map-results";
 import { registerCapabilities } from "./register-capabilities";
+import { resolveCapabilities } from "./resolve-capabilities";
+import {
+  FixtureWirePromptResult,
+  FixtureWireResourceResult,
+  FixtureWireToolResult,
+  resultMappingCapabilities,
+  resultMappingProviders,
+} from "./result-mapping-test-fixtures";
 import type {
   IMcpPromptHandler,
   IMcpResourceHandler,
@@ -203,6 +213,10 @@ function createCapturingServer(): {
   return { server, registrations, promptRegistrations, resourceRegistrations };
 }
 
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 describe("registerCapabilities", () => {
   it("registers the decorator-owned name, description, and schemas", () => {
     const { server, registrations } = createCapturingServer();
@@ -302,6 +316,33 @@ describe("registerCapabilities", () => {
     expect(result).toBe(wireResult);
   });
 
+  it("defaults the string prompt role to user when decorator metadata omits it", async () => {
+    const handler = vi.fn().mockResolvedValue("Roleless prompt.");
+    const resolved: IResolvedPrompt = {
+      metadata: { ...requireFixturePromptMetadata(), role: undefined },
+      instance: { handler },
+    };
+    const { server, promptRegistrations } = createCapturingServer();
+
+    registerCapabilities(server, { tools: [], prompts: [resolved], resources: [] });
+
+    const result = await promptRegistrations[0]?.callback({ code: "unused" }, undefined);
+
+    expect(result).toEqual({
+      messages: [{ role: "user", content: { type: "text", text: "Roleless prompt." } }],
+    });
+  });
+
+  it("propagates a rejecting prompt handler instead of emitting fake messages", async () => {
+    const handler = vi.fn().mockRejectedValue(new Error("prompt failure"));
+    const { server, promptRegistrations } = createCapturingServer();
+
+    registerCapabilities(server, { tools: [], prompts: [createResolvedPrompt(handler)], resources: [] });
+
+    await expect(promptRegistrations[0]?.callback({ code: "unused" }, undefined)).rejects.toThrow("prompt failure");
+    expect(handler).toHaveBeenCalledWith({ code: "unused" }, undefined);
+  });
+
   it("registers the decorator-owned resource name, URI, and MIME hint", () => {
     const { server, resourceRegistrations } = createCapturingServer();
 
@@ -351,5 +392,126 @@ describe("registerCapabilities", () => {
     await expect(resourceRegistrations[0]?.callback(new URL("project://info"), undefined)).rejects.toBeInstanceOf(
       ResourceSerializationError,
     );
+  });
+});
+
+/**
+ * Resolves the shared result-mapping fixtures through a real per-server
+ * container and registers them with a capturing server.
+ *
+ * @returns The capturing server plus its recorded registrations.
+ */
+function registerResolvedResultFixtures(): ReturnType<typeof createCapturingServer> {
+  const container = createAppContainer(resultMappingCapabilities, resultMappingProviders);
+  const resolved = resolveCapabilities(container, resultMappingCapabilities);
+  const captured = createCapturingServer();
+
+  registerCapabilities(captured.server, resolved);
+
+  return captured;
+}
+
+describe("registerCapabilities with resolved result-mapping fixtures", () => {
+  it("maps the resolved domain tool and keeps structured content matching", async () => {
+    const { registrations } = registerResolvedResultFixtures();
+    const registration = registrations.find((item) => item.name === "add");
+
+    const result = await registration?.callback({ a: 1, b: 2 }, undefined);
+
+    expect(result).toEqual({
+      content: [{ type: "text", text: JSON.stringify({ result: 3 }) }],
+      structuredContent: { result: 3 },
+    });
+  });
+
+  it("returns the resolved mixed-content wire tool result by identity", async () => {
+    const { registrations } = registerResolvedResultFixtures();
+    const registration = registrations.find((item) => item.name === "wire_tool");
+
+    const result = await registration?.callback({ label: "ignored" }, undefined);
+
+    expect(result).toBe(FixtureWireToolResult);
+    expect(result?.content).toHaveLength(3);
+  });
+
+  it("maps a resolved throwing tool to safe error text and logs the err key", async () => {
+    const errorSpy = vi.spyOn(logger, "error").mockImplementation(() => logger);
+    const { registrations } = registerResolvedResultFixtures();
+    const registration = registrations.find((item) => item.name === "throwing_tool");
+
+    const result = await registration?.callback({ label: "ignored" }, undefined);
+
+    expect(result).toEqual({ isError: true, content: [{ type: "text", text: "fixture tool failure" }] });
+    expect(result?.content[0]).not.toEqual(expect.objectContaining({ text: expect.stringContaining("at ") }));
+    expect(errorSpy).toHaveBeenCalledWith({ err: expect.any(Error) }, "tool handler failed");
+  });
+
+  it("maps the resolved string resource to unquoted text/plain", async () => {
+    const { resourceRegistrations } = registerResolvedResultFixtures();
+    const registration = resourceRegistrations.find((item) => item.uri === "project://info");
+
+    const result = await registration?.callback(new URL("project://info"), undefined);
+
+    expect(result).toEqual({
+      contents: [{ uri: "project://info", mimeType: "text/plain", text: "A class-based MCP server starter." }],
+    });
+  });
+
+  it("maps the resolved JSON resource to application/json", async () => {
+    const { resourceRegistrations } = registerResolvedResultFixtures();
+    const registration = resourceRegistrations.find((item) => item.uri === "fixture://json");
+    const expected = { name: "fixture", nested: { items: [1, 2, 3] } };
+
+    const result = await registration?.callback(new URL("fixture://json"), undefined);
+
+    expect(result).toEqual({
+      contents: [{ uri: "fixture://json", mimeType: "application/json", text: JSON.stringify(expected) }],
+    });
+  });
+
+  it("returns the resolved binary wire resource by identity with MIME ownership", async () => {
+    const { resourceRegistrations } = registerResolvedResultFixtures();
+    const registration = resourceRegistrations.find((item) => item.uri === "fixture://blob");
+
+    const result = await registration?.callback(new URL("fixture://blob"), undefined);
+
+    expect(result).toBe(FixtureWireResourceResult);
+    expect(result?.contents[0]).toEqual({
+      uri: "fixture://blob",
+      mimeType: "application/octet-stream",
+      blob: "AAECAwQ=",
+    });
+  });
+
+  it("wraps the resolved string prompt with the decorator default role", async () => {
+    const { promptRegistrations } = registerResolvedResultFixtures();
+    const registration = promptRegistrations.find((item) => item.name === "code_review");
+
+    const result = await registration?.callback({ code: "const x = 1;" }, undefined);
+
+    expect(result).toEqual({
+      messages: [{ role: "user", content: { type: "text", text: "Review the following code:\n\nconst x = 1;" } }],
+    });
+  });
+
+  it("wraps the resolved string prompt with the assistant role", async () => {
+    const { promptRegistrations } = registerResolvedResultFixtures();
+    const registration = promptRegistrations.find((item) => item.name === "assistant_prompt");
+
+    const result = await registration?.callback({ topic: "this" }, undefined);
+
+    expect(result).toEqual({
+      messages: [{ role: "assistant", content: { type: "text", text: "Assist with this" } }],
+    });
+  });
+
+  it("returns the resolved mixed-content wire prompt by identity", async () => {
+    const { promptRegistrations } = registerResolvedResultFixtures();
+    const registration = promptRegistrations.find((item) => item.name === "wire_prompt");
+
+    const result = await registration?.callback({ topic: "ignored" }, undefined);
+
+    expect(result).toBe(FixtureWirePromptResult);
+    expect(result?.messages).toHaveLength(3);
   });
 });

@@ -1,3 +1,4 @@
+import type { PromptCallback, ReadResourceCallback, ToolCallback } from "@modelcontextprotocol/server";
 import { inject, injectable } from "inversify";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
@@ -14,10 +15,25 @@ import {
 import { createServer } from "./create-server";
 import { prompt, tool } from "./decorators";
 import { resolveCapabilities } from "./resolve-capabilities";
-import type { ICapabilities, IMcpPromptHandler, IMcpToolHandler } from "./types";
+import type { ICapabilities, IMcpPromptHandler, IMcpToolHandler, McpRequestExtraType } from "./types";
+
+// Bidirectional assignability proof between the SDK callback extra parameter and the alias.
+type AssertSameType<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
 
 const ConvertToolInputSchema = z.object({ value: z.number() });
 const ConvertToolOutputSchema = z.object({ text: z.string() });
+
+const sdkToolExtraMatches: AssertSameType<Parameters<ToolCallback<undefined>>[0], McpRequestExtraType> = true;
+const sdkResourceExtraMatches: AssertSameType<Parameters<ReadResourceCallback>[1], McpRequestExtraType> = true;
+const sdkPromptExtraMatches: AssertSameType<Parameters<PromptCallback<undefined>>[0], McpRequestExtraType> = true;
+const sdkToolExtraWithSchemaMatches: AssertSameType<
+  Parameters<ToolCallback<typeof ConvertToolInputSchema>>[1],
+  McpRequestExtraType
+> = true;
+const sdkPromptExtraWithSchemaMatches: AssertSameType<
+  Parameters<PromptCallback<typeof ConvertToolInputSchema>>[1],
+  McpRequestExtraType
+> = true;
 
 /**
  * Ordinary dependency for the second decorated tool in the type fixture.
@@ -165,5 +181,13 @@ describe("capability type integration", () => {
     expect(BadTool).toBeDefined();
     expect(BadPrompt).toBeDefined();
     expect(ConvertTool).toBeDefined();
+  });
+
+  it("proves the SDK callback extra parameter matches McpRequestExtraType in both directions", () => {
+    expect(sdkToolExtraMatches).toBe(true);
+    expect(sdkResourceExtraMatches).toBe(true);
+    expect(sdkPromptExtraMatches).toBe(true);
+    expect(sdkToolExtraWithSchemaMatches).toBe(true);
+    expect(sdkPromptExtraWithSchemaMatches).toBe(true);
   });
 });

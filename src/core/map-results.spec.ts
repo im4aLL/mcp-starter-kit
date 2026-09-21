@@ -54,6 +54,14 @@ describe("mapToolResult", () => {
     });
   });
 
+  it("keeps domain text and structured content on the same output object", () => {
+    const output = { result: 3 };
+    const result = mapToolResult(output);
+
+    expect(result.structuredContent).toBe(output);
+    expect(result.content).toEqual([{ type: "text", text: JSON.stringify(output) }]);
+  });
+
   it("passes an already-built wire result through unchanged", () => {
     const wireResult: CallToolResult = {
       content: [{ type: "text", text: "custom" }],
@@ -62,6 +70,38 @@ describe("mapToolResult", () => {
     };
 
     expect(mapToolResult(wireResult)).toBe(wireResult);
+  });
+
+  it("treats a domain object with a content array as wire pass-through (documented limitation)", () => {
+    const output = { content: [{ type: "text", text: "domain-shaped" }], other: 1 };
+
+    const result = mapToolResult(output);
+
+    expect(result).toBe(output);
+    expect(result.structuredContent).toBeUndefined();
+  });
+
+  it("passes a mixed-content wire result through by identity with its extra fields", () => {
+    const wireResult: CallToolResult = {
+      content: [
+        { type: "text", text: "first" },
+        { type: "image", data: "aGVsbG8=", mimeType: "image/png" },
+        {
+          type: "resource",
+          resource: { uri: "project://info", mimeType: "text/plain", text: "embedded" },
+        },
+      ],
+      structuredContent: { anything: true },
+      isError: false,
+      _meta: { fixture: "mixed" },
+    };
+
+    const result = mapToolResult(wireResult);
+
+    expect(result).toBe(wireResult);
+    expect(result.content).toHaveLength(3);
+    expect(result.isError).toBe(false);
+    expect(result._meta).toEqual({ fixture: "mixed" });
   });
 });
 
@@ -85,6 +125,27 @@ describe("mapToolError", () => {
     mapToolError(new Error("stderr only"));
 
     expect(stdoutSpy).not.toHaveBeenCalled();
+  });
+
+  it("keeps stack details out of client-visible error text", () => {
+    const error = new Error("safe message");
+    const result = mapToolError(error);
+
+    expect(result.content).toEqual([{ type: "text", text: "safe message" }]);
+    expect(result.content[0]).not.toEqual(
+      expect.objectContaining({ text: expect.stringContaining(error.stack ?? "") }),
+    );
+    expect(result.content[0]).not.toEqual(expect.objectContaining({ text: expect.stringContaining("at ") }));
+  });
+
+  it("maps a thrown non-Error value without leaking its contents", () => {
+    const secret = { stack: "secret detail" };
+
+    expect(mapToolError("plain failure").content).toEqual([{ type: "text", text: "plain failure" }]);
+    expect(mapToolError(secret).content).toEqual([{ type: "text", text: "[object Object]" }]);
+    expect(mapToolError(secret).content[0]).not.toEqual(
+      expect.objectContaining({ text: expect.stringContaining("secret detail") }),
+    );
   });
 });
 
@@ -128,6 +189,31 @@ describe("mapPromptResult", () => {
 
     expect(mapPromptResult(wireResult)).toBe(wireResult);
   });
+
+  it("passes mixed message content types and extra fields through by identity", () => {
+    const wireResult: GetPromptResult = {
+      description: "Mixed fixture.",
+      messages: [
+        { role: "user", content: { type: "text", text: "question" } },
+        { role: "assistant", content: { type: "image", data: "aGVsbG8=", mimeType: "image/png" } },
+        {
+          role: "user",
+          content: {
+            type: "resource",
+            resource: { uri: "project://info", mimeType: "text/plain", text: "embedded" },
+          },
+        },
+      ],
+      _meta: { fixture: "mixed" },
+    };
+
+    const result = mapPromptResult(wireResult, "assistant");
+
+    expect(result).toBe(wireResult);
+    expect(result.messages).toHaveLength(3);
+    expect(result.description).toBe("Mixed fixture.");
+    expect(result._meta).toEqual({ fixture: "mixed" });
+  });
 });
 
 describe("isJsonValue", () => {
@@ -160,6 +246,18 @@ describe("isJsonValue", () => {
     expect(isJsonValue(new Date())).toBe(false);
     expect(isJsonValue(new Map())).toBe(false);
     expect(isJsonValue(new Set())).toBe(false);
+  });
+
+  it("rejects Buffer and class instances", () => {
+    /**
+     * Minimal class instance used to prove non-plain prototypes are rejected.
+     */
+    class Widget {
+      public readonly value = 1;
+    }
+
+    expect(isJsonValue(Buffer.from("bytes"))).toBe(false);
+    expect(isJsonValue(new Widget())).toBe(false);
   });
 
   it("rejects circular references", () => {
@@ -200,6 +298,14 @@ describe("mapResourceResult", () => {
     });
   });
 
+  it("maps a nested object to application/json", () => {
+    const value = { name: "starter", nested: { items: [1, "two", { deep: null }] } };
+
+    expect(mapResourceResult("project://info", value)).toEqual({
+      contents: [{ uri: "project://info", mimeType: "application/json", text: JSON.stringify(value) }],
+    });
+  });
+
   it("maps an array to application/json", () => {
     const value = [1, "two", false];
 
@@ -232,6 +338,26 @@ describe("mapResourceResult", () => {
     expect(mapResourceResult("project://info", wireResult)).toBe(wireResult);
   });
 
+  it("returns prebuilt binary contents by identity with their MIME types and extra fields", () => {
+    const wireResult: ReadResourceResult = {
+      contents: [
+        { uri: "project://blob", mimeType: "application/octet-stream", blob: "AAECAwQ=" },
+        { uri: "project://blob", mimeType: "text/plain", text: "companion" },
+      ],
+      _meta: { fixture: "binary" },
+    };
+
+    const result = mapResourceResult("project://blob", wireResult);
+
+    expect(result).toBe(wireResult);
+    expect(result.contents[0]).toEqual({
+      uri: "project://blob",
+      mimeType: "application/octet-stream",
+      blob: "AAECAwQ=",
+    });
+    expect(result._meta).toEqual({ fixture: "binary" });
+  });
+
   it("rejects undefined without emitting empty text", () => {
     expect(() => mapUnsupportedResource(undefined)).toThrow(ResourceSerializationError);
   });
@@ -249,6 +375,37 @@ describe("mapResourceResult", () => {
 
   it("rejects NaN", () => {
     expect(() => mapUnsupportedResource(Number.NaN)).toThrow(ResourceSerializationError);
+  });
+
+  it("rejects functions and symbols", () => {
+    expect(() => mapUnsupportedResource(() => undefined)).toThrow(ResourceSerializationError);
+    expect(() => mapUnsupportedResource(Symbol("resource"))).toThrow(ResourceSerializationError);
+  });
+
+  it("rejects bigint", () => {
+    expect(() => mapUnsupportedResource(1n)).toThrow(ResourceSerializationError);
+  });
+
+  it("rejects positive and negative infinity", () => {
+    expect(() => mapUnsupportedResource(Number.POSITIVE_INFINITY)).toThrow(ResourceSerializationError);
+    expect(() => mapUnsupportedResource(Number.NEGATIVE_INFINITY)).toThrow(ResourceSerializationError);
+  });
+
+  it("rejects Map and Set", () => {
+    expect(() => mapUnsupportedResource(new Map([["a", 1]]))).toThrow(ResourceSerializationError);
+    expect(() => mapUnsupportedResource(new Set([1]))).toThrow(ResourceSerializationError);
+  });
+
+  it("rejects Buffer and class instances", () => {
+    /**
+     * Minimal class instance used to prove non-plain prototypes are rejected.
+     */
+    class Widget {
+      public readonly value = 1;
+    }
+
+    expect(() => mapUnsupportedResource(Buffer.from("bytes"))).toThrow(ResourceSerializationError);
+    expect(() => mapUnsupportedResource(new Widget())).toThrow(ResourceSerializationError);
   });
 
   it("logs resource serialization failures through the pino err key", () => {

@@ -55,6 +55,10 @@ export function isCallToolResult(value: unknown): value is CallToolResult {
  * A resource wire result carries a `contents` array. The check runs before
  * JSON-value detection because a contents object is itself a JSON object.
  *
+ * The guard is intentionally narrow and only checks that `contents` is an
+ * array, so a domain object with a `contents` array is treated as wire
+ * pass-through even when its elements are not valid resource contents.
+ *
  * @param value - Handler value to inspect.
  * @returns Whether the value already matches the `ReadResourceResult` shape.
  */
@@ -74,6 +78,10 @@ export function isReadResourceResult(value: unknown): value is ReadResourceResul
  * A prompt wire result carries a `messages` array. Passing it through keeps
  * every message role and content type owned by the handler, so the decorator's
  * string-shortcut role never restricts a mixed-role result.
+ *
+ * The guard is intentionally narrow and only checks that `messages` is an
+ * array, so a value with a `messages` array is treated as wire pass-through
+ * even when its elements are not valid prompt messages.
  *
  * @param value - Handler value to inspect.
  * @returns Whether the value already matches the `GetPromptResult` shape.
@@ -248,6 +256,7 @@ function serializeJsonResource(uri: string, value: JsonValue): string {
     failResourceSerialization(`Resource "${uri}" failed JSON serialization.`, error);
   }
 
+  // A non-string here means `JSON.stringify` returned no text; the throw branch is handled above.
   if (typeof text !== "string") {
     failResourceSerialization(`Resource "${uri}" serialized to no text.`);
   }

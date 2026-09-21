@@ -1,4 +1,4 @@
-import type { CallToolResult, GetPromptResult, ResourceContents, ServerContext } from "@modelcontextprotocol/server";
+import type { CallToolResult, GetPromptResult, ReadResourceResult, ServerContext } from "@modelcontextprotocol/server";
 
 import type { JsonObject, JsonValue } from "./json.types";
 
@@ -8,10 +8,8 @@ export type McpRequestExtraType = ServerContext;
 // Domain tool results stay JSON-object shaped so structured output is valid.
 export type ToolHandlerResultType<TOutput extends JsonObject> = TOutput | CallToolResult;
 
-// Domain resource results are strings or JSON values; wire contents pass through.
-export type ResourceHandlerResultType<T extends JsonValue = JsonValue> =
-  | T
-  | { readonly contents: readonly ResourceContents[] };
+// Domain resource results are strings or JSON values; SDK wire results pass through.
+export type ResourceHandlerResultType<T extends JsonValue = JsonValue> = T | ReadResourceResult;
 
 // Prompt results are a string (wrapped with a role) or an already-built SDK result.
 export type PromptHandlerResultType = string | GetPromptResult;
