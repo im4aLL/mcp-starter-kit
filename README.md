@@ -1,3 +1,5 @@
+[![M8ven Score](https://m8ven.ai/badge/mcp/im4all/mcp-starter-kit)](https://m8ven.ai/mcp/im4all/mcp-starter-kit)
+
 # MCP class-based starter
 
 A class-based TypeScript starter for an MCP server that runs over stdio. It ships one example tool, resource, and prompt, keeps domain handlers separate from MCP wire mapping, and keeps the framework core application-agnostic.
